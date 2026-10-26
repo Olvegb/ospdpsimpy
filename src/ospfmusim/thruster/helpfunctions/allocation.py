@@ -13,6 +13,9 @@ frame, so it works as it is in the Fossen frame (layout.py). What changed:
 - the capacity is Thruster.max_thrust / reverse_thrust instead of the DNV
   thrust formula and loss factors;
 - the skeg, dead flushing and rudder branches are left out.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 from dataclasses import dataclass, replace
 from itertools import product

@@ -9,6 +9,9 @@ ospfmusim/run.py puts every run in its own folder, results/<YYYYMMDD_HHMMSS>[_na
 with a copy of the config it was run with (config.toml). libcosim writes one
 CSV per FMU there, named <simulator>_<YYYYMMDD>_<HHMMSS>_<microseconds>.csv,
 where <simulator> is the name in OspSystemStructure.xml (environment, vessel, ...).
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import re
 import tomllib

@@ -5,6 +5,9 @@ Angles are thrust angles in degrees: 0 deg pushes forward, increasing toward
 starboard (layout.py). Copied from the DNV-ST-0111 project
 (dp_capability/models/forbidden_zones.py); the logic does not depend on the
 frame, only the angle convention in the docstrings changed.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 import math
 

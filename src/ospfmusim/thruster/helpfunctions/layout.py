@@ -12,6 +12,9 @@ Coordinate system (Fossen body frame)
   90 deg pushes to starboard and 270 deg to port. This is atan2(fy, fx).
 
 Public functions take angles in degrees.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 import tomllib
 from dataclasses import dataclass, fields

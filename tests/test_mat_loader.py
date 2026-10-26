@@ -1,7 +1,10 @@
-"""Regression checks for direct MSS tanker.mat -> LF/WF/WaveLoads pipeline.
+"""Regression tests for direct MSS tanker.mat -> LF/WF/WaveLoads pipeline.
 
 The explicit zero-viscous-damping choice below is ONLY a code-path smoke test,
 not a physically calibrated tanker model.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Araz, Olve Grønås Birkeland (2026)
 """
 import re
 import tempfile
@@ -12,11 +15,12 @@ import numpy as np
 from scipy.io import loadmat
 
 from app.build.data import default_config
+from ospfmusim.build import PACKAGE
 from ospfmusim.hull.helpfunctions.Wamit import (load_mat_vessel, FREQUENCY_COUNT, HEADING_STEP_DEG,
                                                 FREQUENCY_SPACING)
 from ospfmusim.hull.helpfunctions.WaveLoads import ResponseTable, selected_drift_method
 
-MAT = Path(__file__).resolve().parents[1] / "helpfunctions" / "data" / "tanker.mat"
+MAT = PACKAGE / "hull" / "helpfunctions" / "data" / "tanker.mat"
 
 
 @unittest.skipUnless(MAT.exists() and (MAT.parent / "GunnerusL35_20201112.mat").exists(),

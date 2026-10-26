@@ -3,10 +3,11 @@
 One FMU (FMI 2.0 co-simulation, built with pythonfmu 0.7.0, run in OSP) that turns the sea state
 from the Environment FMU into a set of regular wave components for the hull FMU. Owner: Viljar.
 
-```
-Environment ──H_s, T_p, wave_direction_deg──► Waves ──wave<k>_amplitude, _omega, _phase, _direction_deg──► hull FMU
-                                                │                   k = 1 ... N_WAVES (= 100)
-                                     [waves] in configs/*.toml
+```mermaid
+flowchart LR
+    config["[waves] in configs/*.toml"] --> Waves
+    Environment -->|"H_s, T_p, wave_direction_deg"| Waves
+    Waves -->|"wave#lt;k#gt;_amplitude, _omega, _phase, _direction_deg<br>k = 1 ... N_WAVES (= 100)"| hull["hull FMU"]
 ```
 
 The FMU only describes the **sea**. It does **not** calculate any forces: the wave loads depend on
@@ -101,14 +102,14 @@ the top of `src/ospfmusim/waves/waves.py` (the same idea as `MAX_THRUSTERS` in `
 
 ## 5. How it works
 
-```
-H_s, T_p
-   ↓  helpfunctions/spectra.py + sea_state.py: realize()
-n_frequencies x n_directions wave components       (regular sea: regular_wave(), one wave)
-   ↓  sea_state.py: keep_strongest()
-the N_WAVES components with the most energy (Sørensen 6.2.1, method 1)
-   ↓  sea_state.py: directions_to()   (+ mean wave direction)
-wave<k>_amplitude, _omega, _phase, _direction_deg  ->  outputs
+```mermaid
+flowchart TD
+    sea["H_s, T_p"] -->|"helpfunctions/spectra.py + sea_state.py: realize()"| grid
+    grid["n_frequencies x n_directions wave components<br>(regular sea: regular_wave(), one wave)"]
+    grid -->|"sea_state.py: keep_strongest()"| strongest
+    strongest["the N_WAVES components with the most energy<br>(Sørensen 6.2.1, method 1)"]
+    strongest -->|"sea_state.py: directions_to() (+ mean wave direction)"| outputs
+    outputs["outputs: wave#lt;k#gt;_amplitude, _omega, _phase, _direction_deg"]
 ```
 
 The choice between regular and irregular sea is made in `sea_state.py: sea_from_settings()`.
@@ -125,7 +126,7 @@ the energy is kept (0.93 with the current config).
 | `src/ospfmusim/waves/helpfunctions/spectra.py` | Wave spectra (Pierson–Moskowitz, JONSWAP) and the cos-2s spreading function |
 | `src/ospfmusim/waves/helpfunctions/sea_state.py` | Regular wave, or splits the spectrum into wave components and keeps the strongest. Adds the mean direction |
 | `src/ospfmusim/waves/helpfunctions/settings.py` | Reads `[waves]` from `configs/*.toml` and checks the names |
-| `src/ospfmusim/waves/tests/check_*.py` | Check scripts, see below |
+| `tests/test_spectra.py`, `tests/test_sea_state.py`, `tests/test_wave_settings.py`, `tests/test_waves_fmu.py` | Tests, see below |
 
 `src/ospfmusim/build.py` builds the model folders of `src/ospfmusim` (with `waves/helpfunctions/`) into every FMU's `resources/`.
 
@@ -134,10 +135,10 @@ the energy is kept (0.93 with the current config).
 Run from the repo folder. All of these work on Mac (they do not need OSP).
 
 ```
-python src/ospfmusim/waves/tests/check_spectra.py     # H_s from the spectrum area, peak position
-python src/ospfmusim/waves/tests/check_sea_state.py   # H_s, spreading, repetition, strongest components, directions, sea types
-python src/ospfmusim/waves/tests/check_settings.py    # [waves] in configs/*.toml builds the sea, wrong names are caught
-python src/ospfmusim/waves/tests/check_waves_fmu.py   # the FMU class: outputs, new direction, calm sea, regular sea, errors
+python -m pytest tests/test_spectra.py        # H_s from the spectrum area, peak position
+python -m pytest tests/test_sea_state.py      # H_s, spreading, repetition, strongest components, directions, sea types
+python -m pytest tests/test_wave_settings.py  # [waves] in configs/*.toml builds the sea, wrong names are caught
+python -m pytest tests/test_waves_fmu.py      # the FMU class: outputs, new direction, calm sea, regular sea, errors
 ```
 
 Running the whole system (`python -m ospfmusim.run`) needs Windows or Linux: pythonfmu only

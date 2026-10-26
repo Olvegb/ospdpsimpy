@@ -3,6 +3,9 @@ Thruster power at part thrust, and how the power sources share it.
 
 Copied from the DNV-ST-0111 project (dp_capability/models/power.py). The
 fixed 10% switchboard reserve of [3.12.3] became PowerSource.reserve_fraction.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 import numpy as np
 

@@ -3,10 +3,11 @@
 One FMU (FMI 2.0 co-simulation, built with pythonfmu 0.7.0, run in OSP) that holds the vessel at a
 set-point. It is a **simple PID**, there to close the loop so the whole simulator can run. Owner: Viljar.
 
-```
-kalman_filter ──north_hat, east_hat, psi_hat, u_hat, v_hat, r_hat──► DPController ──tau_X_P ... tau_N_D──► ThrustAllocation
-                                                                         │
-                                                       [controller] and [vessel] in configs/*.toml
+```mermaid
+flowchart LR
+    config["[controller] and [vessel]<br>in configs/*.toml"] --> DPController
+    kalman_filter -->|"north_hat, east_hat, psi_hat, u_hat, v_hat, r_hat"| DPController
+    DPController -->|"tau_X_P ... tau_N_D"| ThrustAllocation
 ```
 
 ## 1. Inputs, outputs, parameter
@@ -92,14 +93,13 @@ Plus `mass_matrix` and `damping_matrix` in `[vessel]`, shared with the Kalman fi
 | File | What it does |
 |---|---|
 | `src/ospfmusim/controller/dp_controller.py` | The FMU, everything in one file (like `ekf.py`) |
-| `src/ospfmusim/controller/tests/check_dp_controller.py` | Signs: the force pushes back towards the set-point, also with another heading; wrap of the heading error; D term; anti-windup |
-| `src/ospfmusim/controller/tests/check_closed_loop.py` | A very simple 3-DOF vessel (`M ν̇ + D ν = τ + Rᵀ b`) in plain Python, without OSP or a hull FMU: the vessel returns to the set-point and holds it against a constant force |
+| `tests/test_dp_controller.py` | Signs: the force pushes back towards the set-point, also with another heading; wrap of the heading error; D term; anti-windup |
+| `tests/test_closed_loop.py` | A very simple 3-DOF vessel (`M ν̇ + D ν = τ + Rᵀ b`) in plain Python, without OSP or a hull FMU: the vessel returns to the set-point and holds it against a constant force |
 
 Run from the repo folder (works on Mac):
 
 ```
-python src/ospfmusim/controller/tests/check_dp_controller.py
-python src/ospfmusim/controller/tests/check_closed_loop.py
+python -m pytest tests/test_dp_controller.py tests/test_closed_loop.py
 ```
 
 ## 5. Known limitations

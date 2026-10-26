@@ -5,6 +5,9 @@ Used by the results app (src/app/build/) and ospfmusim/run.py.
 Only one-line values (numbers, booleans, strings, one-line lists) in [section]
 tables can be changed. Multi-line arrays (such as mass_matrix) and [[array
 tables]] (such as [[thrusters]]) are left as they are.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import json
 import re

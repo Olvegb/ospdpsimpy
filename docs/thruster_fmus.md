@@ -3,11 +3,13 @@
 Two FMUs (FMI 2.0 co-simulation, built with pythonfmu 0.7.0, run in OSP) that turn the DP
 controller's force command into the force the thrusters actually put on the vessel. Owner: William.
 
-```
-DP controller ──P, I, D terms of tau──► ThrustAllocation ──thrust + azimuth command──► ThrusterDynamics ──X, Y, N──► vessel model
-                                              ▲              per thruster (8 slots)          ▲
-                                              └──────────── thrusterK_available ────────────┘
-                                                         (failure injection, optional)
+```mermaid
+flowchart LR
+    controller["DP controller"] -->|"P, I, D terms of tau"| ThrustAllocation
+    ThrustAllocation -->|"thrust + azimuth command<br>per thruster (8 slots)"| ThrusterDynamics
+    ThrusterDynamics -->|"X, Y, N"| vessel["vessel model"]
+    failure["failure injection (optional)"] -.->|"thrusterK_available"| ThrustAllocation
+    failure -.->|"thrusterK_available"| ThrusterDynamics
 ```
 
 - **ThrustAllocation** decides how hard each thruster pushes, and in which direction, so that together

@@ -15,6 +15,9 @@ for the supplied function and declared input convention.
 The force model is horizontal, using heading and LF surge/sway velocity; no
 vertical wind or WF velocity/rotational velocity at the aerodynamic centre.
 Moments are assumed referenced consistently with the LF matrices. Small heel.
+
+License: GPL-3.0-or-later (see LICENSE and NOTICE.md in this folder)
+Authors: Araz, Olve Grønås Birkeland (2026)
 """
 from math import cos, pi, radians, sin
 

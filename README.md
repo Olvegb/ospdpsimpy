@@ -18,7 +18,7 @@ Every constant is in one config file in `configs/`; `src/ospfmusim/OspSystemStru
 | `configs/tests.toml` (the default) | Wind geometry and 3-DOF matrices in `[vessel]` are **placeholder values** for an 88 m OSV. The hull hydrodynamics come from the Gunnerus `.mat` file. |
 | `configs/gunnerus.toml` | RV Gunnerus: wind geometry, and 3-DOF matrices copied from the Gunnerus `.mat` file. |
 
-> **The vessel data file is not in the repository.** Both configs read the hydrodynamic data from `data_examples/GunnerusL35_20201112.mat` (`[vessel_fmu] mat_file`). Put the file there before you run. `src/ospfmusim/hull/helpfunctions/example_test_config.json` is **synthetic** test data, used only by `check_vessel_fmu.py`.
+> **The vessel data file is not in the repository.** Both configs read the hydrodynamic data from `data_examples/GunnerusL35_20201112.mat` (`[vessel_fmu] mat_file`). Put the file there before you run. `src/ospfmusim/hull/helpfunctions/example_test_config.json` is **synthetic** test data, used only by `tests/test_vessel_fmu.py`.
 
 > **Known issue:** with both configs the vessel drifts away after about 25 s, and the run stops at t = 41.5 s with `tau_wind must have shape (6,) and finite values` (the vessel state has become infinite). Runs of 10 s, as below, work.
 
@@ -40,11 +40,12 @@ You need Python 3.11 or newer (the conda environment `master` has 3.12) and the 
 
 ```powershell
 conda activate master
-pip install -e .                  # once: installs requirements.txt and makes ospfmusim and app in src/ importable
+pip install -e ".[test]"          # once: installs requirements.txt and pytest, and makes ospfmusim and app in src/ importable
 python -m ospfmusim.run           # builds the FMUs that have changed, runs, saves to results/<time stamp>/
+python -m pytest                  # runs the tests in tests/
 ```
 
-`scripts/runsimulationexample.py` is a short example script that runs the simulation and reads the results as pandas DataFrames.
+`scripts/run_simulation_example.py` is a short example script that runs the simulation and reads the results as pandas DataFrames.
 
 The same from Python, with the `.mat` file, the config and the system structure as arguments:
 
@@ -110,24 +111,21 @@ All commands are run from this folder, with the `master` environment active (`co
 
 | What | Command |
 |---|---|
-| Install the libraries and make `src/` importable (once) | `pip install -e .` |
+| Install the libraries and make `src/` importable (once) | `pip install -e ".[test]"` (leave out `[test]` to skip pytest and fmpy) |
 | Install only the libraries | `pip install -r requirements.txt` |
 | Install scipy with OpenBLAS (if missing) | `conda install -n master scipy "libblas=*=*openblas"` |
-| Run the example script | `python scripts/runsimulationexample.py` |
+| Run the example script | `python scripts/run_simulation_example.py` |
 | Run the simulation (Python) | `python -m ospfmusim.run` (options: `--config other.toml`, `--mat other.mat`, `--system other.xml`, `--duration 60`, `--name high_wind`, `--output folder`) |
 | Build the FMUs that have changed | `python -m ospfmusim.build` (`--force` builds every FMU) |
 | Open the results app | `python -m app.run` (or `python src/app/run.py`, or `streamlit run src/app/build/app.py`) |
 | Run the simulation (cosim CLI) | `cosim run src/ospfmusim/OspSystemStructure.xml -d 10 --output-dir results` (build the FMUs first) |
-| Waves checks | `python src/ospfmusim/waves/tests/check_waves_fmu.py` (and the other scripts in `src/ospfmusim/waves/tests/`) |
-| Controller checks | `python src/ospfmusim/controller/tests/check_dp_controller.py`, `python src/ospfmusim/controller/tests/check_closed_loop.py` |
-| Environment checks | `python src/ospfmusim/enviroment/tests/check_environment.py` |
-| Kalman filter checks | `python src/ospfmusim/observer/ekf/tests/check_kalman_filter.py` |
-| Vessel check (needs fmpy and the built FMU) | `python src/ospfmusim/hull/tests/check_vessel_fmu.py` |
-| Vessel unit tests | `python -m unittest src/ospfmusim/hull/tests/test_wave_drift.py src/ospfmusim/hull/tests/test_mat_loader.py` |
+| Run every test (about 40 s) | `python -m pytest` |
+| Run the tests of one part | `python -m pytest tests/test_waves_fmu.py` (one file per part, see `tests/`) |
+| Run the tests whose name matches | `python -m pytest -k anti_windup` |
 
 **The FMUs are built for you.** `run_simulation()` (and `python -m ospfmusim.run`) first calls `build_fmus()`, which builds an FMU again only when a file in the model folders of `src/ospfmusim` is newer than it. Changes to `configs/*.toml` and `OspSystemStructure.xml` need no rebuild.
 
-Every FMU gets the same copy of the model folders of `src/ospfmusim` (without `tests/`) in its `resources/`, and imports its help functions through the package, for example `from ospfmusim.waves.helpfunctions.sea_state import ...`. The FMUs share one Python interpreter when they run, so the three `helpfunctions/` folders must be reached through their full package name. See `src/ospfmusim/build.py`.
+Every FMU gets the same copy of the model folders of `src/ospfmusim` in its `resources/`, and imports its help functions through the package, for example `from ospfmusim.waves.helpfunctions.sea_state import ...`. The FMUs share one Python interpreter when they run, so the three `helpfunctions/` folders must be reached through their full package name. See `src/ospfmusim/build.py`.
 
 ## The files
 
@@ -142,37 +140,33 @@ Every FMU gets the same copy of the model folders of `src/ospfmusim` (without `t
 | `src/ospfmusim/controller/dp_controller.py` | DPController FMU, everything in one file | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/thruster/thrust_allocation.py`, `src/ospfmusim/thruster/thruster_dynamics.py` | ThrustAllocation and ThrusterDynamics FMUs. Thin wrappers around `thruster/helpfunctions/` | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/*/helpfunctions/` | The wave, vessel and thruster logic. Built into every FMU's `resources/` | When the logic changes. Rebuilt by itself. |
-| `src/ospfmusim/*/tests/` | Check scripts for environment, waves, controller, Kalman filter and vessel | When that logic changes |
+| `tests/` | The pytest tests: one `test_*.py` per part (environment, waves, vessel, Kalman filter, controller, thrusters). Most run the FMU classes directly in Python, without OSP; `test_vessel_fmu.py` runs the built VesselBlock FMU | When that logic changes |
 | `src/ospfmusim/build.py` | `build_fmus()`: builds the FMUs the system structure uses into `src/ospfmusim/fmus/`, only those that have changed | When an FMU is added |
 | `src/ospfmusim/run.py` | `run_simulation(mat_file, config_file, system_structure)`: builds the FMUs, runs the simulation in a new run folder in `results/`. Also the command line (`python -m ospfmusim.run`), which prints the result | When you want other output |
 | `src/app/run.py` | Starts the results app (`python -m app.run`) | Rarely |
 | `src/app/build/` | The results app (`streamlit run src/app/build/app.py`), and `config_tools.py`, which changes config values as text (also used by `run.py`) | When you want other plots |
 | `docs/` | One document per FMU | When an FMU changes |
 | `data_examples/` | The Gunnerus hydrodynamic data (`.mat`). Not in git: put the file here yourself | When the vessel data changes |
-| `scripts/` | Example scripts, such as `runsimulationexample.py` | When you want another example |
-| `pyproject.toml` | The package: name, license, and `pip install -e .` (the dependencies are read from `requirements.txt`) | Rarely |
+| `scripts/` | Example scripts, such as `run_simulation_example.py` | When you want another example |
+| `pyproject.toml` | The package: name, license, `pip install -e .` (the dependencies are read from `requirements.txt`), the test libraries (`[test]`) and the pytest settings | Rarely |
 | `requirements.txt` | The Python libraries the simulation needs, with the versions allowed | When a library is added |
 | `src/ospfmusim/fmus/` | The built FMUs | Created by `build.py` |
 | `results/` | One folder per run: one CSV file per FMU with every input and output for each time step, and the run's `config.toml` and `OspSystemStructure.xml` | Created by `run.py` |
 
 ## How it fits together
 
-```
- environment ──► wind (mean, slowly varying, gust, direction), current ──────────────┐
-      │                                                                               │
-      └──► H_s, T_p, wave_direction ──► waves ──► wave<k>_* (k = 1..100) ─────────────┤
-                                                                                      ▼
- dynamics ──► X, Y, N (delivered thrust, body) ─────────────────────────────────► vessel
-    ▲  │                                                                              │
-    │  └──► tau_thr_x/y/n ──────────────┐                north, east, yaw ────────────┤
-    │                                   ▼                                             │
-    │                             kalman_filter ◄── tau_wind_x/y/n (wind_X/Y/N) ──────┘
-    │                                   │
-    │                                   ▼  north_hat ... r_hat
-    │                             dp_controller
-    │                                   │
-    │                                   ▼  tau_X/Y/N_P, _I, _D (summed in allocation)
-    └── thrust + azimuth command ◄── allocation      (8 thruster slots)
+```mermaid
+flowchart TD
+    environment -->|"wind (mean, slowly varying, gust, direction), current"| vessel
+    environment -->|"H_s, T_p, wave_direction"| waves
+    waves -->|"wave#lt;k#gt;_* (k = 1..100)"| vessel
+    dynamics -->|"X, Y, N (delivered thrust, body)"| vessel
+    dynamics -->|"tau_thr_x/y/n"| kalman_filter
+    vessel -->|"north, east, yaw"| kalman_filter
+    vessel -->|"wind_X/Y/N to tau_wind_x/y/n"| kalman_filter
+    kalman_filter -->|"north_hat ... r_hat"| dp_controller
+    dp_controller -->|"tau_X/Y/N_P, _I, _D (summed in allocation)"| allocation
+    allocation -->|"thrust + azimuth command (8 thruster slots)"| dynamics
 ```
 
 Step by step, when you run `run_simulation()` or `python -m ospfmusim.run`:
@@ -242,7 +236,7 @@ The code follows [PEP 8](https://peps.python.org/pep-0008/), with lines up to 99
 
 ```powershell
 pip install pycodestyle
-pycodestyle --max-line-length=99 src scripts
+pycodestyle --max-line-length=99 src scripts tests
 ```
 
 ## License

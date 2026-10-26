@@ -5,12 +5,15 @@ low-frequency (LF) motion, wave-frequency (WF) motion and slowly varying disturb
 heading measurements. It is a **3-DOF DP observer** (surge, sway, yaw) with a wave model, after Fossen.
 Owner: Olve.
 
-```
-VesselBlock ──north, east, yaw (LF + WF)──► ExtendedKalmanFilter ──north_hat ... r_hat (LF)──► DPController
-VesselBlock ──wind_X, wind_Y, wind_N──────►          │
-ThrusterDynamics ──X, Y, N────────────────►          ├──b_x_hat, b_y_hat, b_n_hat──► logging
-                                                     └──wf_north_hat, wf_east_hat, wf_psi_hat──► logging
-                     [vessel], [waves] tp and [kalman_filter] in configs/*.toml
+```mermaid
+flowchart LR
+    config["[vessel], [waves] tp and [kalman_filter]<br>in configs/*.toml"] --> ExtendedKalmanFilter
+    VesselBlock -->|"north, east, yaw (LF + WF)"| ExtendedKalmanFilter
+    VesselBlock -->|"wind_X, wind_Y, wind_N"| ExtendedKalmanFilter
+    ThrusterDynamics -->|"X, Y, N"| ExtendedKalmanFilter
+    ExtendedKalmanFilter -->|"north_hat ... r_hat (LF)"| DPController
+    ExtendedKalmanFilter -->|"b_x_hat, b_y_hat, b_n_hat"| logging
+    ExtendedKalmanFilter -->|"wf_north_hat, wf_east_hat, wf_psi_hat"| logging
 ```
 
 The point of the WF states: the measurements contain the total motion, but the controller should only
@@ -139,12 +142,12 @@ Plus `mass_matrix` and `damping_matrix` in `[vessel]`, and `tp` in `[waves]`.
 | File | What it does |
 |---|---|
 | `src/ospfmusim/observer/ekf/ekf.py` | The FMU, everything in one file |
-| `src/ospfmusim/observer/ekf/tests/check_kalman_filter.py` | A simple 3-DOF "true" vessel with a constant disturbance and made-up WF motion, in plain Python without OSP: the LF and WF estimates follow the truth, the bias converges, and the heading wraps cleanly at ±π |
+| `tests/test_kalman_filter.py` | A simple 3-DOF "true" vessel with a constant disturbance and made-up WF motion, in plain Python without OSP: the LF and WF estimates follow the truth, the bias converges, and the heading wraps cleanly at ±π |
 
 Run from the repo folder:
 
 ```
-python src/ospfmusim/observer/ekf/tests/check_kalman_filter.py
+python -m pytest tests/test_kalman_filter.py
 ```
 
 Result with the default config (last 300 s of 600 s):

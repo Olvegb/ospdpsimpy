@@ -9,6 +9,9 @@ plot shows:
 
 It is a Plotly animation (frames), so moving the slider runs in the browser
 without asking Streamlit to redraw the page.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import numpy as np
 import plotly.graph_objects as go

@@ -35,6 +35,9 @@ wn and damping ratio zeta:
     Kp = M wn^2,   Kd = 2 zeta wn M - D  (at least 0),   Ki = Kp wn / 10
 
 So the gains follow the vessel when the matrices in [vessel] change.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import tomllib
 from pathlib import Path

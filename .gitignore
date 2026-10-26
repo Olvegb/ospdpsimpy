@@ -13,5 +13,6 @@ fmus/
 results/
 data_examples/GunnerusL35_20201112.mat
 
-# Written by src/ospfmusim/hull/tests/check_vessel_fmu.py
-TEST_RESULTS.json
+# Made by pytest and ruff
+.pytest_cache/
+.ruff_cache/

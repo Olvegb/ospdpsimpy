@@ -4,6 +4,9 @@ This module DOES NOT read raw WAMIT files, transform axes, or create JSON.
 All input arrays are already in the simulator's body frame, in SI units,
 using a complex phase-lag convention. Interpolate complex Cartesian values
 instead of wrapped phase angles.
+
+License: GPL-3.0-or-later (see LICENSE and NOTICE.md in this folder)
+Authors: Araz, Olve Grønås Birkeland (2026)
 """
 from dataclasses import dataclass
 

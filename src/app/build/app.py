@@ -5,6 +5,9 @@ Run from the repo folder, with the master environment active:
     streamlit run src/app/build/app.py
 
 It opens in the browser. See docs/app.md.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import sys
 from pathlib import Path
