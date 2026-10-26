@@ -2,7 +2,7 @@
 
 Run from the repo folder, with the conda environment master active:
 
-    python scripts/runsimulationexample.py
+    python scripts/run_simulation_example.py
 
 run_simulation() builds the FMUs that have changed, runs the system and saves
 the results in results/<time stamp>_gunnerus_1000s/: one CSV per FMU, and a

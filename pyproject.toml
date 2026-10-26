@@ -28,12 +28,6 @@ license-files = [
     "src/ospfmusim/hull/helpfunctions/NOTICE.md",
 ]
 dynamic = ["version", "dependencies"]
-
-[project.optional-dependencies]
-test = [
-    "pytest>=8",
-    "fmpy>=0.3.32,<0.4",   # tests/test_vessel_fmu.py: runs the built VesselBlock FMU
-]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -47,6 +41,12 @@ classifiers = [
 ]
 
 keywords = ["dynamic positioning", "co-simulation", "fmu", "osp", "marine", "vessel"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "fmpy>=0.3.32,<0.4",   # tests/test_vessel_fmu.py: runs the built VesselBlock FMU
+]
 
 [project.urls]
 Homepage = "https://github.com/Olvegb/ospdpsimpy"

@@ -125,7 +125,7 @@ def test_wf_estimate_follows_the_wf_motion(ten_minutes):
 def test_bias_estimate_converges(ten_minutes):
     log, b = ten_minutes
     b_hat = log["b_hat"].mean(axis=0)
-    assert np.all(np.abs(b_hat - b) < 0.15 * np.abs(b)), "the bias estimate is off by more than 15 %"
+    assert np.all(np.abs(b_hat - b) < 0.15 * np.abs(b)), "the bias estimate is off by > 15 %"
 
 
 def test_heading_near_pi_gives_no_jump():

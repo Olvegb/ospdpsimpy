@@ -51,8 +51,8 @@ Wind is **already applied inside** VesselBlock. Do not separately connect `WindL
 From the repository root in a Python environment with `pythonfmu==0.7.0` and NumPy:
 
 ```sh
-python -m ospfmusim.build                            # builds the FMUs that have changed (--force: all)
-python src/ospfmusim/hull/tests/check_vessel_fmu.py  # requires fmpy
+python -m ospfmusim.build                  # builds the FMUs that have changed (--force: all)
+python -m pytest tests/test_vessel_fmu.py  # requires fmpy (pip install -e ".[test]")
 ```
 
 The native FMI test checks the FMU schema, verifies the packaged module bytes against editable sources, and compares **60 varying-duration time steps** with direct module integration for each of calm water, thrusters, wind, waves, and combined input cases; FMI reset is exercised after each. Additional separately run analytical tests were performed during development; they are not replacements for calibrated measurements.

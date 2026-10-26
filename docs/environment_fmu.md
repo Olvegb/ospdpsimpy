@@ -5,12 +5,13 @@ vessel sees: wind, sea state and current. Everything is in the earth-fixed **NED
 knows nothing about the vessel (no heading input). The vessel FMU turns the wind into relative wind
 and loads itself. Owner: Olve.
 
-```
-                    ┌──mean, slowly varying, gust wind speed, wind_direction_deg──► VesselBlock
-[wind], [waves],    │
-[current] in  ──► Environment ──current_north, current_east──────────────────────► VesselBlock
-configs/*.toml      │
-                    └──H_s, T_p, wave_direction_deg──► Waves ──wave<k>_*──► VesselBlock
+```mermaid
+flowchart LR
+    config["[wind], [waves], [current]<br>in configs/*.toml"] --> Environment
+    Environment -->|"mean, slowly varying, gust wind speed, wind_direction_deg"| VesselBlock
+    Environment -->|"current_north, current_east"| VesselBlock
+    Environment -->|"H_s, T_p, wave_direction_deg"| Waves
+    Waves -->|"wave#lt;k#gt;_*"| VesselBlock
 ```
 
 ## 1. Inputs, outputs, parameter
@@ -160,12 +161,12 @@ wind every run. The waves have their own `seed` in `[waves]`.
 | File | What it does |
 |---|---|
 | `src/ospfmusim/enviroment/environment.py` | The FMU, everything in one file |
-| `src/ospfmusim/enviroment/tests/check_environment.py` | Checks without OSP: everything switched off gives constant outputs; V_sv has zero mean, the right std and time constant, also with another step size; the gust std matches the NORSOK spectrum; the direction follows mean + rate · t and stays in [0, 360); the current components; the seed; the height profile (U10 at 10 m, the log law); V_mean + V_sv stays inside the saturation limits |
+| `tests/test_environment.py` | Tests without OSP: everything switched off gives constant outputs; V_sv has zero mean, the right std and time constant, also with another step size; the gust std matches the NORSOK spectrum; the direction follows mean + rate · t and stays in [0, 360); the current components; the seed; the height profile (U10 at 10 m, the log law); V_mean + V_sv stays inside the saturation limits |
 
 Run from the repo folder:
 
 ```
-python src/ospfmusim/enviroment/tests/check_environment.py
+python -m pytest tests/test_environment.py
 ```
 
 Result with the default config:
