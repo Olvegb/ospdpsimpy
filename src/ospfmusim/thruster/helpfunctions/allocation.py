@@ -14,7 +14,7 @@ frame, so it works as it is in the Fossen frame (layout.py). What changed:
   thrust formula and loss factors;
 - the skeg, dead flushing and rudder branches are left out.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import product
 
 import numpy as np
@@ -197,6 +197,19 @@ def _thruster_pieces(thruster, n_sides, zones):
     return [(directions, limits, np.ones(2, dtype=bool))]
 
 
+def _held_at(thruster, angle_deg, zones):
+    """
+    The piece of an azimuth held at angle_deg for one step: thrust from 0 to
+    max_thrust along it and none across it. No force inside a forbidden zone.
+    """
+    if _inside(angle_deg, zones):
+        return _no_force()
+    a = np.deg2rad(angle_deg)
+    along, across = np.array([np.cos(a), np.sin(a)]), np.array([-np.sin(a), np.cos(a)])
+    return (np.array([along, -along, across, -across]),
+            np.array([thruster.max_thrust, 0.0, 0.0, 0.0]), np.ones(4, dtype=bool))
+
+
 def _size_rows(thruster, n_sides):
     """
     Rows that measure the size of a thruster's force for pass 2: t >= a . f
@@ -280,6 +293,7 @@ class _Setup:
     t_ref: float
     power: _Power | None
     shares: np.ndarray  # (sources, thrusters); no rows without power sources
+    zones: list  # forbidden zones of each thruster; none for an unavailable one
 
 
 def _setup(thrusters, n_sides, flushing, power_sources, available):
@@ -307,7 +321,8 @@ def _setup(thrusters, n_sides, flushing, power_sources, available):
             usable=np.array([usable_power_kw(s) for s in power_sources]) / p_ref,
         )
     size_owner = np.concatenate([[i] * len(s) for i, s in enumerate(sizes)])
-    return _Setup(options, _place(sizes, n), size_owner, t_ref, power, shares)
+    return _Setup(options, _place(sizes, n), size_owner, t_ref, power, shares,
+                  [zones.get(i, []) for i in range(n)])
 
 
 def _problem(thrusters, tau, pieces, s):
@@ -484,6 +499,25 @@ def _allocation(thrusters, p, utilisation, fx, fy, shares):
     return Allocation(fx, fy, utilisation, r, power_kw, shares @ power_kw)
 
 
+def _allocate_step(thrusters, tau, s, weights):
+    """
+    One time step's allocation over the pieces in s: the two passes, or the
+    saturation pass when tau needs u > 1. Returns (Allocation, saturated).
+    """
+    best, best_u = _best(thrusters, tau, s)
+    saturated = best_u > 1 + TOLERANCE
+    if saturated:
+        cost = np.inf
+        for pieces in product(*s.options):
+            p = _problem(thrusters, tau, pieces, s)
+            fx_p, fy_p, cost_p = _closest_tau(p, weights)
+            if cost_p < cost:
+                best, fx, fy, cost = p, fx_p, fy_p, cost_p
+    else:
+        fx, fy = _least_total_thrust(best, best_u)
+    return _allocation(thrusters, best, best_u, fx, fy, s.shares), saturated
+
+
 def allocate(thrusters, tau, n_sides=36, flushing=False, power_sources=None):
     """
     Thruster forces that together give the commanded force tau:
@@ -572,6 +606,8 @@ class Command:
     saturated: bool  # True if the command was out of reach
     # The forces, thrust fractions and power. Its utilisation is that of the
     # command: above 1 (inf if out of reach in any amount) when saturated.
+    # While azimuths are held by their turn rate, both count them where they
+    # can point this step.
     allocation: Allocation
 
 
@@ -579,7 +615,7 @@ class ThrustAllocator:
     """
     Thrust allocation inside a time loop: call step() once per time step.
 
-    The same two passes as allocate(), with three differences:
+    The same two passes as allocate(), with four differences:
     - Saturation: when the command needs u > 1, or can't be given at all,
       u is fixed at 1 and the forces come as close to tau as they can.
       The error is weighted by Layout.tau_weights:
@@ -590,6 +626,11 @@ class ThrustAllocator:
     - Thrusters can be unavailable. They give no force, and their flushing
       sectors on the others are gone.
     - An idle azimuth keeps its last angle, so it doesn't turn for nothing.
+    - With dt, azimuths turn at most max_azimuth_rate * dt per step toward
+      the angle the allocation gives without rate limits. While one can't get
+      there this step, every azimuth is held at its new angle (thrust along
+      it only) and the thrust is allocated again. ThrusterDynamics turns
+      them the same way, so it can follow every command.
 
     The convex pieces of each set of available thrusters are worked out once
     and kept.
@@ -602,7 +643,7 @@ class ThrustAllocator:
         # Until told otherwise, azimuths point ahead.
         self._angle = np.array([90.0 if t.kind == "tunnel" else 0.0 for t in layout.thrusters])
 
-    def step(self, tau, available=None):
+    def step(self, tau, available=None, dt=None):
         """
         Parameters
         ----------
@@ -610,6 +651,9 @@ class ThrustAllocator:
             Commanded force [N] and moment [Nm] in the body frame (layout.py).
         available : sequence of bool, optional
             One per thruster in layout order. None: all available.
+        dt : float, optional
+            Step size [s]. Azimuths then turn at most max_azimuth_rate * dt.
+            None: they turn at once.
 
         Returns
         -------
@@ -628,27 +672,33 @@ class ThrustAllocator:
                 thrusters, self.n_sides, self.layout.flushing_sectors, self.layout.power_sources,
                 available)
         s = self._setups[available]
+        weights = np.asarray(self.layout.tau_weights, dtype=float)
+        allocation, saturated = _allocate_step(thrusters, tau, s, weights)
 
-        best, best_u = _best(thrusters, tau, s)
-        saturated = best_u > 1 + TOLERANCE
-        if saturated:
-            weights = np.asarray(self.layout.tau_weights, dtype=float)
-            cost = np.inf
-            for pieces in product(*s.options):
-                p = _problem(thrusters, tau, pieces, s)
-                fx_p, fy_p, cost_p = _closest_tau(p, weights)
-                if cost_p < cost:
-                    best, fx, fy, cost = p, fx_p, fy_p, cost_p
-        else:
-            fx, fy = _least_total_thrust(best, best_u)
-        allocation = _allocation(thrusters, best, best_u, fx, fy, s.shares)
+        kinds = [t.kind for t in thrusters]
+        azimuth = np.array([k == "azimuth" for k in kinds])
+        # Where the azimuths should point; an idle one keeps its angle.
+        angle = np.where(azimuth & ~np.isnan(allocation.angle_deg), allocation.angle_deg,
+                         self._angle)
+        if dt is not None:
+            reach = np.array([np.inf if t.max_azimuth_rate is None else t.max_azimuth_rate * dt
+                              for t in thrusters])
+            # Shortest signed arc, in [-180, 180), as in ThrusterDynamics.
+            error = (angle - self._angle + 180.0) % 360.0 - 180.0
+            angle = (self._angle + np.clip(error, -reach, reach)) % 360.0
+            if np.any(np.abs(error) > reach):
+                # One can't get there yet: allocate again with the azimuths where they can be.
+                options = [[_held_at(t, a, s.zones[i])] if azimuth[i] and available[i]
+                           else s.options[i]
+                           for i, (t, a) in enumerate(zip(thrusters, angle))]
+                allocation, saturated = _allocate_step(thrusters, tau,
+                                                       replace(s, options=options), weights)
+        self._angle = angle
 
+        fx, fy = allocation.fx, allocation.fy
         x = np.array([t.x for t in thrusters])
         y = np.array([t.y for t in thrusters])
-        kinds = [t.kind for t in thrusters]
         thrust = np.where([k == "tunnel" for k in kinds], fy,
                           np.where([k == "shaft_line" for k in kinds], fx, np.hypot(fx, fy)))
-        turning = np.array([k == "azimuth" for k in kinds]) & ~np.isnan(allocation.angle_deg)
-        self._angle = np.where(turning, allocation.angle_deg, self._angle)
         achieved = np.array([fx.sum(), fy.sum(), (x * fy - y * fx).sum()])
         return Command(thrust, self._angle.copy(), achieved, saturated, allocation)

@@ -72,6 +72,12 @@ Every time step it:
 3. If τ is more than the thrusters can give (u > 1), it gives the **closest reachable τ** instead,
    with the errors in X, Y and N weighted by `tau_weights`, and sets `saturated`.
 4. An azimuth that isn't needed keeps its last angle, so it doesn't turn for nothing.
+5. **Rate limits.** Each azimuth turns toward the angle from steps 2–3 by at most
+   `max_azimuth_rate · dt` (dt = the FMU step size), the shortest way round, as ThrusterDynamics does.
+   While one can't get there in this step, every azimuth is held at its new angle (thrust along it
+   only, 0 to `max_thrust`) and steps 2–3 run again. The other thrusters then make up what they can,
+   and `saturated` shows when they can't. Every command can be followed by ThrusterDynamics, so with
+   no thrust lag the delivered force is the allocated one.
 
 | | Name | Type | Unit | Meaning |
 |---|---|---|---|---|
@@ -84,7 +90,7 @@ Every time step it:
 | output | `thrusterK_azimuth_command_deg` | Real | deg | Direction positive thrust pushes: the commanded angle for azimuths, always 90 for tunnels and 0 for shaft lines |
 | output | `tau_X`, `tau_Y`, `tau_N` | Real | N, N, Nm | τ = P + I + D, the commanded force that is allocated |
 | output | `utilisation` | Real | – | What τ needs as a fraction of what the thrusters have. Above 1 when saturated; `inf` when τ can't be given in any amount (e.g. tunnels only against a surge command) |
-| output | `saturated` | Boolean | – | True when τ was out of reach and the commands give the closest reachable τ |
+| output | `saturated` | Boolean | – | True when τ was out of reach and the commands give the closest reachable τ. Out of reach includes azimuths that haven't turned far enough yet |
 
 K = 1 … 8 (§6). With these definitions every kind of thruster pushes with
 `f = thrust · (cos α, sin α)`. A tunnel with a negative thrust pushes to port, a shaft line with a
@@ -98,8 +104,11 @@ Every time step of length dt it moves each thruster toward its command:
   result doesn't depend on the step size. T_cmd is first clipped to the thruster's limits (azimuths
   to [0, `max_thrust`]). τ_T is `thrust_time_constant`.
 - **Azimuth: rate limit.** The azimuth turns along the shortest arc (350° → 10° goes through 0°) by at
-  most `max_azimuth_rate · dt`. It may pass through a forbidden zone on the way, pushing as it turns.
-  Tunnels and shaft lines ignore the angle command.
+  most `max_azimuth_rate · dt`. It may pass through a forbidden zone on the way. If it is still short
+  of the command, the thrust command is scaled by `max(cos(angle left to turn), 0)`, so it never
+  pushes more than 90° away from the command. The rate-aware allocation (§3, step 5) never sends an
+  angle it can't reach, so this only matters when the two FMUs disagree (other step sizes or
+  turn rates). Tunnels and shaft lines ignore the angle command.
 - **Trip.** `thrusterK_available = false` sets the thrust to 0 at once, and the azimuth stops turning.
 - **Forces.** `fx = T cos α`, `fy = T sin α` per thruster, and `X = Σ fx`, `Y = Σ fy`,
   `N = Σ (x·fy − y·fx)`.
@@ -236,12 +245,14 @@ constants (5 s azimuths, 3 s tunnels) and turn rates (10 °/s) are typical but m
 
 ## 7. Behaviour to be aware of
 
-- **The allocation does not see the actual azimuth angles.** It assumes the thrusters already point
-  where it sends them. From rest, AZ2 needs about 16 s to turn from 0° to 157°, and it pushes as it
-  turns. Holding τ = (0, 300 kN, 0), X reaches about 200 kN and N about −4.5 MNm before the forces
-  settle on the command (at 30 s: (0, 299.6 kN, 10 kNm)). With the DP controller in the loop, it
-  should see this as an error and correct it (not tested yet). A rate-aware allocation is a possible
-  later step.
+- **Turning azimuths.** The allocation doesn't read the actual angles back; it keeps its own and
+  turns them as fast as ThrusterDynamics does. Both FMUs must therefore run with the same step size
+  and read the same `max_azimuth_rate`. During a turn `saturated` can be true even though the
+  thrusters are lightly loaded: the command is out of reach where the azimuths point now. The
+  target angle comes from an allocation without rate limits and can jump when τ changes direction;
+  the azimuths then turn toward the new one.
+- **Commanded vs delivered.** The plots compare P + I + D with the delivered force. They differ
+  by the thrust lag, and while `saturated` is true also by what the thrusters can't give.
 - **Saturation.** When τ is out of reach, `saturated` is true and `utilisation` is above 1, or `inf`
   if τ can't be given in any amount. The commands then give the closest reachable τ. With equal
   `tau_weights`, the heading (N) is held first and Y or X gives way.

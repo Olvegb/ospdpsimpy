@@ -95,15 +95,16 @@ class ThrustAllocation(Fmi2Slave):
         self.allocate()
 
     def do_step(self, current_time, step_size):
-        self.allocate()
+        self.allocate(step_size)
         return True
 
-    def allocate(self):
+    def allocate(self, dt=0.0):
+        # dt: how far the azimuths may turn, max_azimuth_rate * dt (0 at the start).
         n = len(self.allocator.layout.thrusters)
         available = [getattr(self, f"thruster{k}_available") for k in range(1, n + 1)]
         for dof in DOFS:
             setattr(self, f"tau_{dof}", sum(getattr(self, f"tau_{dof}_{term}") for term in TERMS))
-        command = self.allocator.step((self.tau_X, self.tau_Y, self.tau_N), available)
+        command = self.allocator.step((self.tau_X, self.tau_Y, self.tau_N), available, dt)
         for k, (thrust, angle) in enumerate(zip(command.thrust, command.azimuth_deg), start=1):
             setattr(self, f"thruster{k}_thrust_command", float(thrust))
             setattr(self, f"thruster{k}_azimuth_command_deg", float(angle))
