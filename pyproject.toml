@@ -12,8 +12,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ospfmusim"
 authors = [
-  { name="Olve Grønås Birkeland", email="olvebirkeland@icloud.com"
-  name="William Boland", email="willamboland1112@gmail.com"}
+  { name="Olve Grønås Birkeland", email="olvebirkeland@icloud.com" },
+  { name="William Boland", email="williamboland1112@gmail.com" },
 ]
 description = "DP co-simulation of vessels with Python FMUs in OSP"
 readme = "README.md"

@@ -36,7 +36,7 @@ Every constant is in one config file in `configs/`; `src/ospfmusim/OspSystemStru
 
 ## Getting started
 
-You need Python 3.11 or newer (the conda environment `master` has 3.12) and the `.mat` file in `data_examples/` (see above). Run from this folder in the VS Code terminal:
+You need Python 3.11 or newer (the conda environment `master` has 3.12) and the `.mat` file in `data_examples/` (see above). Run from the "ospdpsimpy" folder in the VS Code terminal:
 
 ```powershell
 conda activate master
