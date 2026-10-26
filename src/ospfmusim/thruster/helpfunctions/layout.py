@@ -13,9 +13,9 @@ Coordinate system (Fossen body frame)
 
 Public functions take angles in degrees.
 """
+import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
-import tomllib
 
 # "azimuth" covers anything that can turn its thrust in any direction (pods too).
 KINDS = ("azimuth", "tunnel", "shaft_line")
@@ -39,8 +39,10 @@ class Thruster:
     # Forbidden thrust directions: (start, end) thrust angles [deg], each zone
     # going from start toward starboard to end, e.g. ((80, 100),).
     forbidden_zones: tuple[tuple[float, float], ...] = ()
-    diameter: float | None = None  # propeller diameter [m]; only needed for the flushing sectors
-    power_kw: float | None = None  # power at max_thrust [kW]; needed for power output and bus limits
+    # Propeller diameter [m]; only needed for the flushing sectors.
+    diameter: float | None = None
+    # Power at max_thrust [kW]; needed for power output and bus limits.
+    power_kw: float | None = None
     # Where the thruster takes its power from: (PowerSource name, share)
     # pairs with the shares summing to 1, e.g. (("SWBD 1", 1.0),). Only
     # needed when the allocation has power sources.
@@ -55,7 +57,8 @@ class Thruster:
         if not self.max_thrust > 0:
             raise ValueError(f"{self.name}: max_thrust must be positive, got {self.max_thrust}")
         if self.max_reverse_thrust is not None and self.max_reverse_thrust < 0:
-            raise ValueError(f"{self.name}: max_reverse_thrust must not be negative, got {self.max_reverse_thrust}")
+            raise ValueError(f"{self.name}: max_reverse_thrust must not be negative, "
+                             f"got {self.max_reverse_thrust}")
         for field in ("diameter", "power_kw", "thrust_time_constant", "max_azimuth_rate"):
             value = getattr(self, field)
             if value is not None and not value > 0:
@@ -69,7 +72,10 @@ class Thruster:
 
 @dataclass(frozen=True)
 class PowerSource:
-    """A switchboard (bus) or prime mover that supplies thrusters. Switchboards joined by a closed bus-tie are one source."""
+    """A switchboard (bus) or prime mover that supplies thrusters.
+
+    Switchboards joined by a closed bus-tie are one source.
+    """
 
     name: str  # e.g. "SWBD 1"
     available_kw: float  # power available [kW]
@@ -84,7 +90,8 @@ class Layout:
 
     thrusters: tuple[Thruster, ...]
     power_sources: tuple[PowerSource, ...] | None = None  # None: no power limit
-    flushing_sectors: bool = False  # add the DNV-ST-0111 [3.11.3] flushing sectors to the forbidden zones
+    # Add the DNV-ST-0111 [3.11.3] flushing sectors to the forbidden zones.
+    flushing_sectors: bool = False
     # When the command is out of reach: cost per N of error in X and Y and
     # per Nm of error in N (allocation.ThrustAllocator). A larger N weight
     # gives up sway or surge before heading.
@@ -92,7 +99,8 @@ class Layout:
 
     def __post_init__(self):
         if len(self.tau_weights) != 3 or min(self.tau_weights) < 0:
-            raise ValueError(f"tau_weights must be three numbers >= 0 (X, Y, N), got {self.tau_weights}")
+            raise ValueError("tau_weights must be three numbers >= 0 (X, Y, N), "
+                             f"got {self.tau_weights}")
 
 
 def _tuples(value):
@@ -142,20 +150,24 @@ def load_layout(path):
     data = tomllib.loads(Path(path).read_text(encoding="utf-8-sig"))
     if not data.get("thrusters"):
         raise ValueError(f"{path}: no [[thrusters]]")
-    thrusters = tuple(_build(Thruster, t, f"{path}, thruster {k}") for k, t in enumerate(data["thrusters"]))
+    thrusters = tuple(_build(Thruster, t, f"{path}, thruster {k}")
+                      for k, t in enumerate(data["thrusters"]))
     names = [t.name for t in thrusters]
     if len(set(names)) != len(names):
         raise ValueError(f"{path}: thruster names must be different, got {names}")
     sources = data.get("power_sources")
     if sources is not None:
-        sources = tuple(_build(PowerSource, s, f"{path}, power source {k}") for k, s in enumerate(sources))
+        sources = tuple(_build(PowerSource, s, f"{path}, power source {k}")
+                        for k, s in enumerate(sources))
     allocation = data.get("allocation", {})
     unknown = set(allocation) - {"flushing_sectors", "tau_weights"}
     if unknown:
         raise ValueError(f"{path}: unknown keys in [allocation]: {sorted(unknown)}")
     if not isinstance(allocation.get("flushing_sectors", False), bool):
-        raise ValueError(f"{path}: flushing_sectors must be true or false, got {allocation['flushing_sectors']!r}")
+        raise ValueError(f"{path}: flushing_sectors must be true or false, "
+                         f"got {allocation['flushing_sectors']!r}")
     try:
-        return Layout(thrusters, sources, **{key: _tuples(value) for key, value in allocation.items()})
+        settings = {key: _tuples(value) for key, value in allocation.items()}
+        return Layout(thrusters, sources, **settings)
     except ValueError as error:
         raise ValueError(f"{path}: {error}") from None

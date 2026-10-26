@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
@@ -33,7 +32,8 @@ def cached_results(folder, stamp):           # stamp is only there to refresh th
 
 
 @st.cache_data(show_spinner="Making the footprint animation ...")
-def footprint_html(folder, stamp, start, stop, set_point, n_arrows, n_frames, with_environment, dark):
+def footprint_html(folder, stamp, start, stop, set_point, n_arrows, n_frames, with_environment,
+                   dark):
     """The animated footprint as HTML, cached. stamp is only there to refresh the cache.
 
     Shown with st.iframe instead of st.plotly_chart, because st.plotly_chart
@@ -41,12 +41,14 @@ def footprint_html(folder, stamp, start, stop, set_point, n_arrows, n_frames, wi
     plotly.js is loaded from its CDN, so this plot needs an internet connection.
     """
     results = {name: df.loc[start:stop] for name, df in data.load_results(folder).items()}
+    environment = results.get("environment") if with_environment else None
     figure = footprint.animated_footprint(results["vessel"], set_point, n_arrows, n_frames,
-                                          results.get("environment") if with_environment else None)
-    figure["layout"]["template"] = pio.templates["plotly_dark" if dark else "plotly_white"].to_plotly_json()
+                                          environment)
+    template = pio.templates["plotly_dark" if dark else "plotly_white"]
+    figure["layout"]["template"] = template.to_plotly_json()
     figure["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-    return pio.to_html(figure, include_plotlyjs="cdn", full_html=False, auto_play=False, validate=False,
-                       config={"displaylogo": False})
+    return pio.to_html(figure, include_plotlyjs="cdn", full_html=False, auto_play=False,
+                       validate=False, config={"displaylogo": False})
 
 
 def line_plot(series, title, y_label, height=320):
@@ -83,8 +85,9 @@ if "pending_run" in st.session_state:          # a run that just finished in the
     st.session_state["run_select"] = st.session_state.pop("pending_run")
 if st.session_state.get("run_select") not in labels:
     st.session_state.pop("run_select", None)
-label = st.sidebar.selectbox("Run", labels, key="run_select", help="Every run has its own folder in results/, "
-                             "newest first.") if runs else None
+label = st.sidebar.selectbox(
+    "Run", labels, key="run_select",
+    help="Every run has its own folder in results/, newest first.") if runs else None
 with st.sidebar.expander("Other folder"):
     other = st.text_input("Results folder", "", placeholder=r"C:\...\my_runs\run1",
                           help="Show a run that is not in results/.")
@@ -108,8 +111,8 @@ if results:
     results = {name: df.loc[start:stop] for name, df in results.items()}
     st.sidebar.caption("Files: " + ", ".join(sorted(results)))
     st.sidebar.caption("Config: the run's own copy." if config_path else
-                       f"Config: configs/{data.default_config().name} now (this run has no copy), which "
-                       "may differ from the config the results were made with.")
+                       f"Config: configs/{data.default_config().name} now (this run has no copy), "
+                       "which may differ from the config the results were made with.")
 
 R = results.get                                 # short name: R("vessel") -> DataFrame or None
 
@@ -118,7 +121,8 @@ R = results.get                                 # short name: R("vessel") -> Dat
 #  Pages
 # ---------------------------------------------------------------------
 
-tabs = st.tabs(["New run", "Overview", "Vessel", "Environment", "Kalman filter", "Control and thrusters", "Data"])
+tabs = st.tabs(["New run", "Overview", "Vessel", "Environment", "Kalman filter",
+               "Control and thrusters", "Data"])
 
 with tabs[0]:
     editor.render()
@@ -143,29 +147,38 @@ with tabs[1]:
         if vessel is not None:
             ctrl = config.get("controller", {})
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=vessel["east"], y=vessel["north"], mode="lines", name="Total (LF + WF)"))
-            fig.add_trace(go.Scatter(x=vessel["lf_east"], y=vessel["lf_north"], mode="lines", name="LF"))
+            fig.add_trace(go.Scatter(x=vessel["east"], y=vessel["north"], mode="lines",
+                                     name="Total (LF + WF)"))
+            fig.add_trace(go.Scatter(x=vessel["lf_east"], y=vessel["lf_north"], mode="lines",
+                                     name="LF"))
             fig.add_trace(go.Scatter(x=[ctrl.get("east_ref", 0.0)], y=[ctrl.get("north_ref", 0.0)],
-                                     mode="markers", name="Set-point", marker=dict(symbol="x", size=12)))
+                                     mode="markers", name="Set-point",
+                                     marker=dict(symbol="x", size=12)))
             fig.add_trace(go.Scatter(x=vessel["east"].iloc[[-1]], y=vessel["north"].iloc[[-1]],
                                      mode="markers", name="End", marker=dict(size=9)))
-            fig.update_layout(title="Position (footprint)", xaxis_title="East [m]", yaxis_title="North [m]",
-                              height=480, margin=dict(l=10, r=10, t=40, b=10),
+            fig.update_layout(title="Position (footprint)", xaxis_title="East [m]",
+                              yaxis_title="North [m]", height=480,
+                              margin=dict(l=10, r=10, t=40, b=10),
                               yaxis=dict(scaleanchor="x", scaleratio=1))
             show(fig)
         else:
             missing("vessel")
     with right:
         st.subheader("Config of this run")
-        wind, waves, current = config.get("wind", {}), config.get("waves", {}), config.get("current", {})
+        wind = config.get("wind", {})
+        waves = config.get("waves", {})
+        current = config.get("current", {})
+        thrusters = ", ".join(name for _, name in data.thruster_slots(config)) or "none"
         st.markdown(
             f"- **Vessel:** {config.get('vessel', {}).get('type', '?')}\n"
-            f"- **Wind:** {wind.get('mean_speed', '?')} m/s from {wind.get('direction_deg', '?')}°\n"
+            f"- **Wind:** {wind.get('mean_speed', '?')} m/s "
+            f"from {wind.get('direction_deg', '?')}°\n"
             f"- **Waves:** H_s {waves.get('hs', '?')} m, T_p {waves.get('tp', '?')} s, "
             f"from {waves.get('direction_deg', '?')}° ({waves.get('sea_type', '?')})\n"
-            f"- **Current:** {current.get('speed', '?')} m/s towards {current.get('direction_deg', '?')}°\n"
+            f"- **Current:** {current.get('speed', '?')} m/s "
+            f"towards {current.get('direction_deg', '?')}°\n"
             f"- **Duration:** {config.get('simulation', {}).get('duration', '?')} s\n"
-            f"- **Thrusters:** {', '.join(name for _, name in data.thruster_slots(config)) or 'none'}"
+            f"- **Thrusters:** {thrusters}"
         )
 
     vessel = R("vessel")
@@ -177,17 +190,18 @@ with tabs[1]:
             n_frames = st.slider("Time steps on the slider", 20, 400, 150, step=10,
                                  help="More steps = smoother, but a slower page.")
             show_environment = st.checkbox("Show wind, waves and current", value=True)
-            st.caption("Move the time slider under the plot, or press ▶ Play. At each time the plot shows "
-                       "the track so far, earlier headings (thin arrows, dots coloured by time) and the "
-                       "vessel now (large dot and thick arrow). Position and heading are the total motion "
-                       "(LF + WF).")
+            st.caption("Move the time slider under the plot, or press ▶ Play. At each time the "
+                       "plot shows the track so far, earlier headings (thin arrows, dots coloured "
+                       "by time) and the vessel now (large dot and thick arrow). Position and "
+                       "heading are the total motion (LF + WF).")
             if show_environment:
-                reference = ", ".join(f"{name.lower()} {value:g} {'m H_s' if name == 'Waves' else 'm/s'}"
-                                      for name, value in data.ENVIRONMENT_REFERENCE.items())
-                st.caption("Wind, waves and current start on the side they come from and point the way "
-                           "they go, with their values at that time. The length shows the size: full length "
-                           f"at {reference}, and at least a quarter of that so small values still show their "
-                           "direction.")
+                reference = ", ".join(
+                    f"{name.lower()} {value:g} {'m H_s' if name == 'Waves' else 'm/s'}"
+                    for name, value in data.ENVIRONMENT_REFERENCE.items())
+                st.caption("Wind, waves and current start on the side they come from and point "
+                           "the way they go, with their values at that time. The length shows the "
+                           f"size: full length at {reference}, and at least a quarter of that so "
+                           "small values still show their direction.")
         with left:
             ctrl = config.get("controller", {})
             set_point = (ctrl.get("north_ref", 0.0), ctrl.get("east_ref", 0.0))
@@ -209,29 +223,38 @@ with tabs[2]:
         c3.metric("Std position", f"{data.position_std(vessel):,.2f} m")
         c1, c2 = st.columns(2)
         with c1:
-            show(line_plot([("Total", vessel["north"]), ("LF", vessel["lf_north"])], "North", "[m]"))
-            show(line_plot([("Total", deg(vessel["yaw"])), ("LF", deg(vessel["lf_yaw"]))], "Heading", "[deg]"))
+            show(line_plot([("Total", vessel["north"]), ("LF", vessel["lf_north"])],
+                           "North", "[m]"))
+            show(line_plot([("Total", deg(vessel["yaw"])), ("LF", deg(vessel["lf_yaw"]))],
+                           "Heading", "[deg]"))
         with c2:
-            show(line_plot([("Total", vessel["east"]), ("LF", vessel["lf_east"])], "East", "[m]"))
+            show(line_plot([("Total", vessel["east"]), ("LF", vessel["lf_east"])],
+                           "East", "[m]"))
             show(line_plot([("North [m]", vessel["wf_north"]), ("East [m]", vessel["wf_east"]),
-                            ("Yaw [deg]", deg(vessel["wf_yaw"]))], "Wave-frequency (WF) motion", ""))
-        show(line_plot([("u", vessel["lf_u"]), ("v", vessel["lf_v"])], "LF velocity, body frame", "[m/s]"))
+                            ("Yaw [deg]", deg(vessel["wf_yaw"]))],
+                           "Wave-frequency (WF) motion", ""))
+        show(line_plot([("u", vessel["lf_u"]), ("v", vessel["lf_v"])],
+                       "LF velocity, body frame", "[m/s]"))
 
         st.subheader("Heave, roll and pitch")
         c1, c2, c3 = st.columns(3)
         with c1:
             # down is positive downwards (NED), so heave up is negative.
-            show(line_plot([("Total", vessel["down"]), ("LF", vessel["lf_down"])], "Heave (down)", "[m]"))
+            show(line_plot([("Total", vessel["down"]), ("LF", vessel["lf_down"])],
+                           "Heave (down)", "[m]"))
         with c2:
-            show(line_plot([("Total", deg(vessel["roll"])), ("LF", deg(vessel["lf_roll"]))], "Roll", "[deg]"))
+            show(line_plot([("Total", deg(vessel["roll"])), ("LF", deg(vessel["lf_roll"]))],
+                           "Roll", "[deg]"))
         with c3:
-            show(line_plot([("Total", deg(vessel["pitch"])), ("LF", deg(vessel["lf_pitch"]))], "Pitch", "[deg]"))
+            show(line_plot([("Total", deg(vessel["pitch"])), ("LF", deg(vessel["lf_pitch"]))],
+                           "Pitch", "[deg]"))
 
         st.subheader("Loads on the vessel, body frame")
         dynamics = R("dynamics")
         c1, c2, c3 = st.columns(3)
         for column, dof, unit in ((c1, "X", "N"), (c2, "Y", "N"), (c3, "N", "Nm")):
-            series = [("Wind", vessel[f"wind_{dof}"]), ("Wave drift", vessel[f"wave_drift_{dof}"])]
+            series = [("Wind", vessel[f"wind_{dof}"]),
+                      ("Wave drift", vessel[f"wave_drift_{dof}"])]
             if dynamics is not None:
                 series.append(("Thrusters", dynamics[dof]))
             with column:
@@ -245,20 +268,25 @@ with tabs[3]:
         missing("environment")
     else:
         show(line_plot([("Total", data.total_wind_speed(env)), ("Mean", env["mean_wind_speed"]),
-                        ("Slowly varying", env["slowly_varying_wind_speed"]), ("Gust", env["gust_wind_speed"])],
+                        ("Slowly varying", env["slowly_varying_wind_speed"]),
+                        ("Gust", env["gust_wind_speed"])],
                        "Wind speed", "[m/s]", height=380))
         c1, c2 = st.columns(2)
         with c1:
             show(line_plot([("Wind (from)", env["wind_direction_deg"]),
                             ("Waves (from)", env["wave_direction_deg"]),
-                            ("Current (towards)", env["current_direction_deg"])], "Directions", "[deg]"))
+                            ("Current (towards)", env["current_direction_deg"])],
+                           "Directions", "[deg]"))
         with c2:
             show(line_plot([("North", env["current_north"]), ("East", env["current_east"])],
                            "Current", "[m/s]"))
         waves = R("waves")
-        st.markdown(f"**Sea state:** H_s = {env['H_s'].iloc[-1]:.2f} m, T_p = {env['T_p'].iloc[-1]:.2f} s"
-                    + (f", kept energy in the wave components = {waves['kept_energy_fraction'].iloc[-1]:.1%}"
-                       if waves is not None and "kept_energy_fraction" in waves else ""))
+        sea_state = (f"**Sea state:** H_s = {env['H_s'].iloc[-1]:.2f} m, "
+                     f"T_p = {env['T_p'].iloc[-1]:.2f} s")
+        if waves is not None and "kept_energy_fraction" in waves:
+            sea_state += (", kept energy in the wave components = "
+                          f"{waves['kept_energy_fraction'].iloc[-1]:.1%}")
+        st.markdown(sea_state)
 
 # --- Kalman filter ---------------------------------------------------
 with tabs[4]:
@@ -267,7 +295,8 @@ with tabs[4]:
     if kf is None:
         missing("kalman_filter")
     else:
-        st.caption("Estimate vs the vessel's true LF and WF motion. The filter only sees the measured total.")
+        st.caption("Estimate vs the vessel's true LF and WF motion. "
+                   "The filter only sees the measured total.")
         c1, c2, c3 = st.columns(3)
         for column, dof, true, wf_true, label, f in (
                 (c1, "north", "lf_north", "wf_north", "North [m]", lambda s: s),
@@ -283,7 +312,8 @@ with tabs[4]:
                 if vessel is not None:
                     series.append(("WF true", f(vessel[wf_true])))
                 show(line_plot(series, f"WF: {label}", ""))
-        show(line_plot([("b_x [N]", kf["b_x_hat"]), ("b_y [N]", kf["b_y_hat"]), ("b_n [Nm]", kf["b_n_hat"])],
+        show(line_plot([("b_x [N]", kf["b_x_hat"]), ("b_y [N]", kf["b_y_hat"]),
+                        ("b_n [Nm]", kf["b_n_hat"])],
                        "Bias estimate (NED)", ""))
 
 # --- Control and thrusters --------------------------------------------
@@ -302,7 +332,8 @@ with tabs[5]:
         c1, c2, c3 = st.columns(3)
         for column, dof, unit in ((c1, "X", "N"), (c2, "Y", "N"), (c3, "N", "Nm")):
             # Runs from before the controller sent out P, I and D only have tau_<dof>.
-            terms = [(term, dp[f"tau_{dof}_{term}"]) for term in ("P", "I", "D") if f"tau_{dof}_{term}" in dp]
+            terms = [(term, dp[f"tau_{dof}_{term}"]) for term in ("P", "I", "D")
+                     if f"tau_{dof}_{term}" in dp]
             commanded = sum(values for _, values in terms) if terms else dp[f"tau_{dof}"]
             series = [("Commanded (P + I + D)", commanded)]
             if dynamics is not None:
@@ -341,5 +372,5 @@ with tabs[6]:
     if chosen:
         show(line_plot([(c, df[c]) for c in chosen], simulator, "", height=420))
     st.dataframe(df[columns], width="stretch", height=300)
-    st.download_button("Download as CSV", df.to_csv().encode("utf-8"), file_name=f"{simulator}.csv",
-                       mime="text/csv")
+    st.download_button("Download as CSV", df.to_csv().encode("utf-8"),
+                       file_name=f"{simulator}.csv", mime="text/csv")

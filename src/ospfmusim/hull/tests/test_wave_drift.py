@@ -1,7 +1,9 @@
 """Analytical checks independent of the fast single-sum implementation."""
 import unittest
 from unittest.mock import patch
+
 import numpy as np
+
 from ospfmusim.hull.helpfunctions.WaveLoads import WaveLoadModel, selected_drift_method
 
 
@@ -57,7 +59,8 @@ class DriftChecks(unittest.TestCase):
                 for i in range(3):
                     for j in range(3):
                         q = np.sqrt(diagonal[dof, i]*diagonal[dof, j])
-                        expected[dof] += q*m.amplitudes[i]*m.amplitudes[j]*np.cos(phase[i]-phase[j])
+                        expected[dof] += (q*m.amplitudes[i]*m.amplitudes[j]
+                                          * np.cos(phase[i] - phase[j]))
             np.testing.assert_allclose(m.drift(t, (0, 0, 0)), expected, atol=1e-13)
         np.testing.assert_allclose(m.mean_drift(0), diagonal @ m.amplitudes**2)
 

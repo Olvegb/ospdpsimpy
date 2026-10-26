@@ -134,7 +134,9 @@ def calm_sea(n_waves):
 
 
 def regular_wave(height, period, n_waves):
-    """One regular wave as the first component (wave1_ in the FMU). The other n_waves - 1 get amplitude 0.
+    """One regular wave as the first component (wave1_ in the FMU).
+
+    The other n_waves - 1 get amplitude 0.
 
     height: wave height H [m] (crest to trough), so the amplitude is H / 2
     period: wave period T [s], so the frequency is 2 * pi / T
@@ -193,9 +195,11 @@ def sea_from_settings(hs, tp, p, n_waves):
     sea = realize(hs, tp,
                   spectrum_type=p["spectrum_type"], gamma=float(p["gamma"]),
                   spreading_type=p["spreading_type"], s=float(p["spreading_s"]),
-                  n_directions=int(p["n_directions"]), direction_limit_deg=float(p["direction_limit_deg"]),
+                  n_directions=int(p["n_directions"]),
+                  direction_limit_deg=float(p["direction_limit_deg"]),
                   n_frequencies=int(p["n_frequencies"]),
-                  omega_min_factor=float(p["omega_min_factor"]), omega_max_factor=float(p["omega_max_factor"]),
+                  omega_min_factor=float(p["omega_min_factor"]),
+                  omega_max_factor=float(p["omega_max_factor"]),
                   random_frequencies=bool(p["random_frequencies"]),
                   random_directions=bool(p["random_directions"]),
                   seed=int(p["seed"]))

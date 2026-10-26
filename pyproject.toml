@@ -1,27 +1,37 @@
 # Install once, in the repo folder, with the conda environment master active:
 #
 #     pip install -e .
+#
+# This also installs the libraries in requirements.txt.
 
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm>=8", "wheel"]
+# setuptools 77 or newer for the SPDX license field (PEP 639).
+requires = ["setuptools>=77", "setuptools_scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "ospfmusim"
 authors = [
-  { name="Olve Grønås Birkeland", email="olvebirkeland@icloud.com"}
+  { name="Olve Grønås Birkeland", email="olvebirkeland@icloud.com"
+  name="William Boland", email="willamboland1112@gmail.com"}
 ]
 description = "DP co-simulation of vessels with Python FMUs in OSP"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE" }
+license = "MIT"
+# The project license, and the GPL-3.0-or-later license and notice of the
+# hull calculation modules in hull/helpfunctions/ (see NOTICE.md there).
+license-files = [
+    "LICENSE",
+    "src/ospfmusim/hull/helpfunctions/LICENSE",
+    "src/ospfmusim/hull/helpfunctions/NOTICE.md",
+]
 dynamic = ["version", "dependencies"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
@@ -32,11 +42,11 @@ classifiers = [
 keywords = ["dynamic positioning", "co-simulation", "fmu", "osp", "marine", "vessel"]
 
 [project.urls]
-Homepage = "https://github.com/Olvegb/Gunnerus_OSP"
-Repository = "https://github.com/Olvegb/Gunnerus_OSP.git"
-Documentation = "https://github.com/Olvegb/Gunnerus_OSP/tree/main/docs"
-Issues = "https://github.com/Olvegb/Gunnerus_OSP/issues"
-Source = "https://github.com/Olvegb/Gunnerus_OSP"
+Homepage = "https://github.com/Olvegb/ospdpsimpy"
+Repository = "https://github.com/Olvegb/ospdpsimpy.git"
+Documentation = "https://github.com/Olvegb/ospdpsimpy/tree/main/docs"
+Issues = "https://github.com/Olvegb/ospdpsimpy/issues"
+Source = "https://github.com/Olvegb/ospdpsimpy"
 
 [tool.setuptools]
 include-package-data = true
@@ -45,11 +55,18 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.dynamic]
+# requirements.txt is the one list of libraries; comments in it are ignored.
 dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools.package-data]
-# Files that are not .py but are needed: the system structure and the hull data.
-ospfmusim = ["OspSystemStructure.xml", "hull/helpfunctions/*.json", "hull/helpfunctions/LICENSE"]
+# Files that are not .py but are needed: the system structure, the hull data,
+# and the license and notice of the hull modules.
+ospfmusim = [
+    "OspSystemStructure.xml",
+    "hull/helpfunctions/*.json",
+    "hull/helpfunctions/LICENSE",
+    "hull/helpfunctions/NOTICE.md",
+]
 
 [tool.setuptools_scm]
 # Basic setuptools-scm config: derive version from git tags.

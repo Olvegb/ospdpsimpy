@@ -45,7 +45,6 @@ def jonswap(omega, hs, tp, gamma):
     return normalisation * pierson_moskowitz(omega, hs, tp) * peak
 
 
-
 def cos2s(dtheta, s):
     """Cos-2s directional spreading function D(theta - theta0) [1/rad].
 

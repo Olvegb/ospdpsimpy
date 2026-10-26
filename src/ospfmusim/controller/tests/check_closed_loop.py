@@ -20,8 +20,8 @@ import numpy as np
 from app.build.data import default_config
 from ospfmusim.controller.dp_controller import DPController, rotation, total_tau
 
-CONFIG = default_config()                        # the config the simulation uses (OspSystemStructure.xml)
-DT = 0.1                                         # time step [s], as in OspSystemStructure.xml
+CONFIG = default_config()   # the config the simulation uses (OspSystemStructure.xml)
+DT = 0.1                    # time step [s], as in OspSystemStructure.xml
 DURATION = 30 * 60.0                             # 30 minutes
 
 config = tomllib.loads(CONFIG.read_text(encoding="utf-8-sig"))
@@ -64,12 +64,16 @@ def report(title, eta0, b_ned):
     print(f"  start: {distance[0]:.1f} m from the set-point, heading error {error[0, 2]:+.1f} deg")
     for minutes in (2, 5, 10):
         k = int(minutes * 60 / DT) - 1
-        print(f"  after {minutes:2d} min: {distance[k]:5.2f} m, heading error {error[k, 2]:+6.2f} deg")
-    print(f"  last 5 min: at most {distance[last].max():.3f} m and {np.abs(error[last, 2]).max():.3f} deg from the set-point")
+        print(f"  after {minutes:2d} min: {distance[k]:5.2f} m, "
+              f"heading error {error[k, 2]:+6.2f} deg")
+    print(f"  last 5 min: at most {distance[last].max():.3f} m and "
+          f"{np.abs(error[last, 2]).max():.3f} deg from the set-point")
     print(f"  largest distance from the set-point: {distance.max():.2f} m")
     tau_end = taus[-1] + 0.0                              # + 0.0 turns -0 into 0
-    print(f"  tau at the end: X = {tau_end[0]:.0f} N, Y = {tau_end[1]:.0f} N, N = {tau_end[2]:.0f} Nm"
-          f"  (should cancel the force: X = {-(rotation(etas[-1, 2]).T @ b_ned)[0] + 0.0:.0f} N, Y = {-(rotation(etas[-1, 2]).T @ b_ned)[1] + 0.0:.0f} N)")
+    force_body = -(rotation(etas[-1, 2]).T @ b_ned) + 0.0
+    print(f"  tau at the end: X = {tau_end[0]:.0f} N, Y = {tau_end[1]:.0f} N, "
+          f"N = {tau_end[2]:.0f} Nm"
+          f"  (should cancel the force: X = {force_body[0]:.0f} N, Y = {force_body[1]:.0f} N)")
 
 
 report("CHECK: START AWAY FROM THE SET-POINT, NO FORCE:",

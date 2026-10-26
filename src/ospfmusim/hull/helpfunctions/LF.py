@@ -67,7 +67,8 @@ class LF:
     #             or np.any(np.diff(freqs) <= 0)):
     #         raise ValueError('ShipX frequencies must be finite and increasing')
     #     if not np.isfinite(frequency) or not freqs[0] <= frequency <= freqs[-1]:
-    #         raise ValueError('Choose a frequency inside the table; zero-frequency LF coefficients cannot be inferred')
+    #         raise ValueError('Choose a frequency inside the table; '
+    #                          'zero-frequency LF coefficients cannot be inferred')
     #     if not np.isclose(np.asarray(data['velocities'])[0], 0):
     #         raise ValueError('Expected zero speed at table index 0')
     #     index = int(np.argmin(abs(freqs-frequency)))

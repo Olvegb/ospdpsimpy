@@ -124,7 +124,6 @@ def load_gunnerus():
 def main():
     """Run this file in VS Code and verify actual matrix values in the terminal."""
     data = load_gunnerus()
-    v = loadmat(GUNNERUS_FILE, simplify_cells=True)["vessel"]
     print("\n========== GUNNERUS MATLAB DATA TEST ==========")
     print("Source:", data["source"])
     print("Vessel:", data["vessel_name"])

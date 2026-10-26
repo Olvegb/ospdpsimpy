@@ -54,7 +54,8 @@ class ThrusterDynamics:
         self.thrusters = layout.thrusters
         kinds = [t.kind for t in self.thrusters]
         self._azimuth = np.array([k == "azimuth" for k in kinds])
-        self._low = np.array([0.0 if k == "azimuth" else -t.reverse_thrust for k, t in zip(kinds, self.thrusters)])
+        self._low = np.array([0.0 if k == "azimuth" else -t.reverse_thrust
+                              for k, t in zip(kinds, self.thrusters)])
         self._high = np.array([t.max_thrust for t in self.thrusters])
         self._x = np.array([t.x for t in self.thrusters])
         self._y = np.array([t.y for t in self.thrusters])
@@ -84,24 +85,31 @@ class ThrusterDynamics:
         n = len(self.thrusters)
         thrust_cmd = np.asarray(thrust_cmd, dtype=float)
         azimuth_cmd_deg = np.asarray(azimuth_cmd_deg, dtype=float)
-        available = np.ones(n, dtype=bool) if available is None else np.asarray(available, dtype=bool)
-        for name, value in (("thrust_cmd", thrust_cmd), ("azimuth_cmd_deg", azimuth_cmd_deg), ("available", available)):
+        if available is None:
+            available = np.ones(n, dtype=bool)
+        else:
+            available = np.asarray(available, dtype=bool)
+        for name, value in (("thrust_cmd", thrust_cmd), ("azimuth_cmd_deg", azimuth_cmd_deg),
+                            ("available", available)):
             if value.shape != (n,):
-                raise ValueError(f"{name} needs one value per thruster ({n}), got shape {value.shape}")
+                raise ValueError(f"{name} needs one value per thruster ({n}), "
+                                 f"got shape {value.shape}")
         if dt < 0:
             raise ValueError(f"dt must not be negative, got {dt}")
 
-        lag = np.array([1.0 if t.thrust_time_constant is None else 1.0 - np.exp(-dt / t.thrust_time_constant)
+        lag = np.array([1.0 if t.thrust_time_constant is None
+                        else 1.0 - np.exp(-dt / t.thrust_time_constant)
                         for t in self.thrusters])
         target = np.clip(thrust_cmd, self._low, self._high)
         self.thrust = np.where(available, self.thrust + (target - self.thrust) * lag, 0.0)
 
         # Shortest signed arc to the command, in [-180, 180).
         error = (azimuth_cmd_deg - self.azimuth_deg + 180.0) % 360.0 - 180.0
-        reach = np.array([np.inf if t.max_azimuth_rate is None else t.max_azimuth_rate * dt for t in self.thrusters])
+        reach = np.array([np.inf if t.max_azimuth_rate is None else t.max_azimuth_rate * dt
+                          for t in self.thrusters])
         turning = self._azimuth & available
-        self.azimuth_deg = np.where(turning, (self.azimuth_deg + np.clip(error, -reach, reach)) % 360.0,
-                                    self.azimuth_deg)
+        turned = (self.azimuth_deg + np.clip(error, -reach, reach)) % 360.0
+        self.azimuth_deg = np.where(turning, turned, self.azimuth_deg)
 
         alpha = np.deg2rad(self.azimuth_deg)
         fx = self.thrust * np.cos(alpha)

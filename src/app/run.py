@@ -19,7 +19,10 @@ APP = Path(__file__).resolve().parent / "build" / "app.py"
 
 
 def main(argv=None):
-    """Runs `streamlit run app.py` with the Python that runs this file, and returns its exit code."""
+    """Runs `streamlit run app.py` with the Python that runs this file.
+
+    Returns its exit code.
+    """
     args = sys.argv[1:] if argv is None else list(argv)
     try:
         return subprocess.call([sys.executable, "-m", "streamlit", "run", str(APP), *args])

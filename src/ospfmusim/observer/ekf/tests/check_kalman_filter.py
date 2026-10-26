@@ -1,9 +1,9 @@
 """Checks of the ExtendedKalmanFilter FMU (observer/ekf/ekf.py), without OSP.
 
 A simple "true" 3-DOF vessel, M nu_dot + D nu = tau + R^T b, is simulated in
-plain Python with the matrices in the config the simulation uses, a constant disturbance b in NED
-and a made-up wave-frequency motion added on top. The filter gets the total
-motion as measurement and must split it into LF and WF.
+plain Python with the matrices in the config the simulation uses, a constant
+disturbance b in NED and a made-up wave-frequency motion added on top. The
+filter gets the total motion as measurement and must split it into LF and WF.
 
 Checks:
   1. The LF estimate follows the true LF motion, and is much smoother than
@@ -21,7 +21,7 @@ import numpy as np
 from app.build.data import default_config
 from ospfmusim.observer.ekf.ekf import ExtendedKalmanFilter, rotation, wrap_angle
 
-CONFIG = default_config()                        # the config the simulation uses (OspSystemStructure.xml)
+CONFIG = default_config()   # the config the simulation uses (OspSystemStructure.xml)
 DT = 0.1
 
 
@@ -64,10 +64,14 @@ def simulate(duration, psi_0=0.0, bias_ned=(2.0e4, -3.0e4, 1.0e5)):
             e, n = state[:3], state[3:]
             R = rotation(e[2])
             return np.r_[R @ n, np.linalg.solve(M, tau + R.T @ b - D @ n)]
+
         state = np.r_[eta, nu]
         for _ in range(10):
             h = DT / 10
-            k1 = f(state); k2 = f(state + h / 2 * k1); k3 = f(state + h / 2 * k2); k4 = f(state + h * k3)
+            k1 = f(state)
+            k2 = f(state + h / 2 * k1)
+            k3 = f(state + h / 2 * k2)
+            k4 = f(state + h * k3)
             state = state + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
         eta, nu = state[:3], state[3:]
         eta[2] = wrap_angle(eta[2])
@@ -80,7 +84,10 @@ def simulate(duration, psi_0=0.0, bias_ned=(2.0e4, -3.0e4, 1.0e5)):
         kf.tau_thr_x, kf.tau_thr_y, kf.tau_thr_n = tau
         kf.do_step(t, DT)
 
-        log["t"].append(t + DT); log["eta"].append(eta.copy()); log["eta_w"].append(eta_w); log["y"].append(y)
+        log["t"].append(t + DT)
+        log["eta"].append(eta.copy())
+        log["eta_w"].append(eta_w)
+        log["y"].append(y)
         log["eta_hat"].append([kf.north_hat, kf.east_hat, kf.psi_hat])
         log["eta_w_hat"].append([kf.wf_north_hat, kf.wf_east_hat, kf.wf_psi_hat])
         log["b_hat"].append([kf.b_x_hat, kf.b_y_hat, kf.b_n_hat])
@@ -102,17 +109,20 @@ def check_lf_wf_split():
     print("1. LF estimate vs truth (last 300 s)")
     print(f"   RMS LF error      [m, m, rad]: {np.round(rms(lf_error), 4)}")
     print(f"   RMS WF amplitude  [m, m, rad]: {np.round(rms(wf_true), 4)}")
-    assert np.all(rms(lf_error) < 0.3 * rms(wf_true)), "the LF estimate still contains much of the WF motion"
+    assert np.all(rms(lf_error) < 0.3 * rms(wf_true)), \
+        "the LF estimate still contains much of the WF motion"
 
     print("2. WF estimate vs truth (last 300 s)")
     print(f"   RMS WF error      [m, m, rad]: {np.round(rms(wf_error), 4)}")
-    assert np.all(rms(wf_error) < 0.3 * rms(wf_true)), "the WF estimate does not follow the WF motion"
+    assert np.all(rms(wf_error) < 0.3 * rms(wf_true)), \
+        "the WF estimate does not follow the WF motion"
 
     print("3. Bias estimate vs truth (mean of last 300 s)")
     b_hat = log["b_hat"][late].mean(axis=0)
     print(f"   true  [N, N, Nm]: {b}")
     print(f"   est.  [N, N, Nm]: {np.round(b_hat, 0)}")
-    assert np.all(np.abs(b_hat - b) < 0.15 * np.abs(b)), "the bias estimate is off by more than 15 %"
+    assert np.all(np.abs(b_hat - b) < 0.15 * np.abs(b)), \
+        "the bias estimate is off by more than 15 %"
 
 
 def check_heading_wrap():
