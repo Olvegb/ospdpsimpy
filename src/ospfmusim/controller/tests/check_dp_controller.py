@@ -15,11 +15,13 @@ import tomllib
 import numpy as np
 
 from app.build.data import default_config
-from ospfmusim.controller.dp_controller import OUTPUTS, DPController, rotation, total_tau, wrap_angle
+from ospfmusim.controller.dp_controller import (OUTPUTS, DPController, rotation, total_tau,
+                                                wrap_angle)
 
-CONFIG = default_config()                        # the config the simulation uses (OspSystemStructure.xml)
-DT = 0.1                                         # time step [s], as in OspSystemStructure.xml
-HEADINGS = (0.0, 45.0, 90.0, 180.0, 270.0)       # vessel heading relative to the set-point heading [deg]
+CONFIG = default_config()   # the config the simulation uses (OspSystemStructure.xml)
+DT = 0.1                    # time step [s], as in OspSystemStructure.xml
+# Vessel heading relative to the set-point heading [deg]
+HEADINGS = (0.0, 45.0, 90.0, 180.0, 270.0)
 
 failures = []
 
@@ -33,8 +35,11 @@ def controller():
 
 
 def tau(north=0.0, east=0.0, heading=0.0, **velocities):
-    """tau [X, Y, N] (body) after one step, with the vessel at the set-point + (north [m], east [m],
-    heading [deg]) and the given body velocities (u_hat, v_hat, r_hat). Also returns psi_hat [rad]."""
+    """tau [X, Y, N] (body) after one step, with the vessel at the set-point.
+
+    The vessel is at the set-point + (north [m], east [m], heading [deg]) and has
+    the given body velocities (u_hat, v_hat, r_hat). Also returns psi_hat [rad].
+    """
     fmu = controller()
     north_ref, east_ref, psi_ref = fmu.reference
     fmu.north_hat, fmu.east_hat = north_ref + north, east_ref + east
@@ -46,8 +51,8 @@ def tau(north=0.0, east=0.0, heading=0.0, **velocities):
 
 
 def check(text, ok, t):
-    print(f"  [{'OK' if ok else 'FAIL'}] {text:52s} tau_X = {t[0]:10.0f} N,  tau_Y = {t[1]:10.0f} N,  "
-          f"tau_N = {t[2]:12.0f} Nm")
+    print(f"  [{'OK' if ok else 'FAIL'}] {text:52s} tau_X = {t[0]:10.0f} N,  "
+          f"tau_Y = {t[1]:10.0f} N,  tau_N = {t[2]:12.0f} Nm")
     if not ok:
         failures.append(text)
 
@@ -68,7 +73,8 @@ check("At the set-point, not moving: tau = 0", np.allclose(t, 0.0), t)
 
 print("CHECK THE P TERM ON POSITION: the force in NED must point back towards the set-point")
 for heading in HEADINGS:
-    for north, east, where in ((10.0, 0.0, "10 m north"), (0.0, 10.0, "10 m east"), (-7.0, 7.0, "7 m south, 7 m east")):
+    for north, east, where in ((10.0, 0.0, "10 m north"), (0.0, 10.0, "10 m east"),
+                               (-7.0, 7.0, "7 m south, 7 m east")):
         t, psi = tau(north, east, heading)
         force_ned = (rotation(psi) @ t)[:2]
         check(f"{where}, heading set-point {heading:+.0f} deg", force_ned @ [north, east] < 0.0, t)
@@ -76,13 +82,16 @@ for heading in HEADINGS:
 print("CHECK THE P TERM ON HEADING: turn back the shortest way")
 for heading, expected in ((10.0, -1), (-10.0, +1), (179.0, -1), (181.0, +1), (359.0, +1)):
     t, _ = tau(heading=heading)
-    check(f"Heading set-point {heading:+.0f} deg: tau_N {'<' if expected < 0 else '>'} 0", np.sign(t[2]) == expected, t)
+    check(f"Heading set-point {heading:+.0f} deg: tau_N {'<' if expected < 0 else '>'} 0",
+          np.sign(t[2]) == expected, t)
 t1, _ = tau(heading=1.0)
 t359, _ = tau(heading=359.0)
-check("Heading set-point +359 deg gives the same |tau_N| as -1 deg", np.isclose(t359[2], -t1[2]), t359)
+check("Heading set-point +359 deg gives the same |tau_N| as -1 deg",
+      np.isclose(t359[2], -t1[2]), t359)
 
 print("CHECK THE D TERM (at the set-point, moving): brake")
-for name, value, dof, unit in (("u_hat", 1.0, 0, "m/s"), ("v_hat", 1.0, 1, "m/s"), ("r_hat", 0.01, 2, "rad/s")):
+for name, value, dof, unit in (("u_hat", 1.0, 0, "m/s"), ("v_hat", 1.0, 1, "m/s"),
+                               ("r_hat", 0.01, 2, "rad/s")):
     t, _ = tau(**{name: value})
     check(f"{name} = {value} {unit}: {('tau_X', 'tau_Y', 'tau_N')[dof]} < 0", t[dof] < 0.0, t)
 

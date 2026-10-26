@@ -57,7 +57,8 @@ def flushing_sectors(thrusters):
             dx, dy = flushing.x - flushed.x, flushing.y - flushed.y
             s = math.hypot(dx, dy)
             if s == 0.0:
-                raise ValueError(f"{flushing.name} and {flushed.name} are at the same horizontal position")
+                raise ValueError(f"{flushing.name} and {flushed.name} are at the same "
+                                 "horizontal position")
             if s < FLUSHING_DISTANCE_D * flushing.diameter:
                 centre = math.degrees(math.atan2(dy, dx))
                 half = math.degrees(math.atan(0.1 + flushing.diameter / s))

@@ -35,7 +35,8 @@ SLOTS = range(1, MAX_THRUSTERS + 1)
 class ThrusterDynamics(Fmi2Slave):
 
     author = "William"
-    description = "Thruster dynamics: thrust lag and azimuth rate limits, and the force (X, Y, N) on the vessel"
+    description = ("Thruster dynamics: thrust lag and azimuth rate limits, and the force "
+                   "(X, Y, N) on the vessel")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -59,7 +60,8 @@ class ThrusterDynamics(Fmi2Slave):
         # N [Nm], the same names as Olve's WindLoads), and the total power.
         # Power is 0 for a thruster without power_kw in the config.
         for k in SLOTS:
-            for name in (f"thruster{k}_thrust", f"thruster{k}_azimuth_deg", f"thruster{k}_power_kw"):
+            for name in (f"thruster{k}_thrust", f"thruster{k}_azimuth_deg",
+                         f"thruster{k}_power_kw"):
                 setattr(self, name, 0.0)
                 self.register_variable(Real(name, causality=Fmi2Causality.output))
         self.X = self.Y = self.N = self.total_power_kw = 0.0

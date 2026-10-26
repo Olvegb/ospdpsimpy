@@ -1,4 +1,7 @@
-"""Quick check of sea_state.py. Run from the repo folder:  python src/ospfmusim/waves/tests/check_sea_state.py"""
+"""Quick check of sea_state.py.
+
+Run from the repo folder:  python src/ospfmusim/waves/tests/check_sea_state.py
+"""
 import numpy as np
 
 from ospfmusim.waves.helpfunctions.sea_state import (directions_to, elevation, keep_strongest,
@@ -22,7 +25,8 @@ print("CHECK SPREADING FUNCTION:")
 theta = np.linspace(-np.pi / 2, np.pi / 2, 2001)
 for s in (1, 2, 10):
     area = np.trapezoid(cos2s(theta, s), theta)
-    print(f"  s = {s:2d}: area under D = {area:.4f} (should be 1),  D at mean direction = {cos2s(0.0, s):.3f}")
+    print(f"  s = {s:2d}: area under D = {area:.4f} (should be 1),  "
+          f"D at mean direction = {cos2s(0.0, s):.3f}")
 
 print("CHECK HS:")
 for spreading_type in ("none", "cos2s"):
@@ -30,7 +34,8 @@ for spreading_type in ("none", "cos2s"):
     m0 = np.sum(sea.amplitudes**2 / 2)       # energy in the components
     zeta = elevation(t, sea)                 # wave elevation time series
     print(f"  {spreading_type:5s}: {len(sea.amplitudes):3d} components,  "
-          f"Hs from components = {4 * np.sqrt(m0):.3f} m,  from time series = {4 * np.std(zeta):.3f} m")
+          f"Hs from components = {4 * np.sqrt(m0):.3f} m,  "
+          f"from time series = {4 * np.std(zeta):.3f} m")
 
 print("CHECK DIRECTIONS (cos2s):")
 sea = make_sea("cos2s")
@@ -39,7 +44,8 @@ mean_offset = np.degrees(np.sum(energy * sea.direction_offsets) / np.sum(energy)
 within_30 = np.sum(energy[np.abs(sea.direction_offsets) <= np.radians(30)]) / np.sum(energy)
 print(f"  Energy-weighted mean direction offset: {mean_offset:+.1f} deg  (should be close to 0)")
 print(f"  Share of energy within +-30 deg:        {within_30:.0%}")
-print(f"  Widest direction used:                  {np.degrees(np.abs(sea.direction_offsets).max()):.1f} deg")
+widest_deg = np.degrees(np.abs(sea.direction_offsets).max())
+print(f"  Widest direction used:                  {widest_deg:.1f} deg")
 
 
 def envelope(t, sea):
@@ -55,7 +61,8 @@ t_short = np.arange(0.0, 200.0, 0.5)
 for random_frequencies in (False, True):
     sea = make_sea("none", random_frequencies)
     same = np.allclose(envelope(t_short, sea), envelope(t_short + t_repeat, sea))
-    print(f"  random_frequencies = {random_frequencies}:  groups repeat after {t_repeat:.1f} s? {same}")
+    print(f"  random_frequencies = {random_frequencies}:  "
+          f"groups repeat after {t_repeat:.1f} s? {same}")
 
 print("CHECK WRONG NAME:")
 try:
@@ -81,7 +88,8 @@ print("CHECK DIRECTIONS SENT OUT:")
 long_crested, _ = keep_strongest(make_sea("none"), 5)
 for from_deg in (0.0, 45.0, 270.0):
     to_deg = np.degrees(directions_to(long_crested, from_deg, direction_is_from=True)[0])
-    print(f"  Waves from {from_deg:5.1f} deg travel to {to_deg:5.1f} deg  (should be {(from_deg + 180) % 360:5.1f})")
+    print(f"  Waves from {from_deg:5.1f} deg travel to {to_deg:5.1f} deg  "
+          f"(should be {(from_deg + 180) % 360:5.1f})")
 
 print("CHECK SEA TYPES (sea_from_settings):")
 p = {"sea_type": "irregular", "spectrum_type": "jonswap", "gamma": 3.3, "spreading_type": "cos2s",
@@ -94,8 +102,8 @@ print(f"  regular:               {np.count_nonzero(regular.amplitudes)} wave sen
       f"omega = {regular.frequencies[0]:.4f} rad/s (should be 2 pi/T = {2 * np.pi / tp:.4f}),  "
       f"direction offset = {regular.direction_offsets[0]:.1f},  kept energy = {kept:.0%}")
 zeta = elevation(np.arange(0.0, tp, 0.01), regular)
-print(f"                         highest crest = {zeta.max():.3f} m, deepest trough = {zeta.min():.3f} m "
-      f"(should be +-{hs / 2})")
+print(f"                         highest crest = {zeta.max():.3f} m, "
+      f"deepest trough = {zeta.min():.3f} m (should be +-{hs / 2})")
 long_crested, _ = sea_from_settings(hs, tp, dict(p, spreading_type="none"), 100)
 print(f"  irregular, long-crested:  {np.count_nonzero(long_crested.amplitudes)} waves,  "
       f"all in the mean direction: {np.all(long_crested.direction_offsets == 0.0)}")

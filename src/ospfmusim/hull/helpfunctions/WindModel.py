@@ -17,6 +17,7 @@ vertical wind or WF velocity/rotational velocity at the aerodynamic centre.
 Moments are assumed referenced consistently with the LF matrices. Small heel.
 """
 from math import cos, pi, radians, sin
+
 import numpy as np
 
 
@@ -52,6 +53,7 @@ def blendermann_wind_coefficients(
 
     return cx, cy, cn, ck
 
+
 class WindLoads:
     """Tabulate Olve's coefficients and calculate body loads from apparent wind."""
 
@@ -61,17 +63,19 @@ class WindLoads:
         SI units; parameters are supplied by a test or future shared-config loader.
         The same ten-degree coefficient interpolation as Olve's FMU is retained.
         """
-        names = ('air_density','loa','area_lateral','area_frontal','s_L','s_H',
-                 'cd_t','cd_lAF_bow','cd_lAF_stern','delta','kappa')
+        names = ('air_density', 'loa', 'area_lateral', 'area_frontal', 's_L', 's_H',
+                 'cd_t', 'cd_lAF_bow', 'cd_lAF_stern', 'delta', 'kappa')
         self.p = {k: float(parameters[k]) for k in names}
         if not all(np.isfinite(list(self.p.values()))):
             raise ValueError('Wind parameters must be finite')
-        for k in ('air_density','loa','area_lateral','area_frontal','cd_t'):
-            if self.p[k] <= 0: raise ValueError(f'{k} must be positive')
-        args={k:v for k,v in self.p.items() if k!='air_density'}
-        self.table=np.array([blendermann_wind_coefficients(**args, relative_angle_deg=a)
-                             for a in range(0,361,10)])
-        if not np.isfinite(self.table).all(): raise ValueError('Invalid wind coefficients')
+        for k in ('air_density', 'loa', 'area_lateral', 'area_frontal', 'cd_t'):
+            if self.p[k] <= 0:
+                raise ValueError(f'{k} must be positive')
+        args = {k: v for k, v in self.p.items() if k != 'air_density'}
+        self.table = np.array([blendermann_wind_coefficients(**args, relative_angle_deg=a)
+                               for a in range(0, 361, 10)])
+        if not np.isfinite(self.table).all():
+            raise ValueError('Invalid wind coefficients')
 
     @classmethod
     def from_toml(cls, path):
@@ -98,18 +102,24 @@ class WindLoads:
         velocity in NED, rotate to body axes, subtract LF body velocity, then
         recover the direction the apparent wind comes FROM.
         """
-        eta,nu=np.asarray(eta_lf,float),np.asarray(nu_lf,float)
-        if eta.shape!=(6,) or nu.shape!=(6,) or not np.isfinite(np.r_[eta,nu]).all():
+        eta, nu = np.asarray(eta_lf, float), np.asarray(nu_lf, float)
+        if eta.shape != (6,) or nu.shape != (6,) or not np.isfinite(np.r_[eta, nu]).all():
             raise ValueError('Need six finite pose and six finite body velocity values')
-        values=np.array([mean_wind_speed,sw_wind_speed,gust_wind_speed,wind_direction_deg],float)
-        if not np.isfinite(values).all(): raise ValueError('Wind inputs must be finite')
-        speed=sum(values[:3])
-        if speed<0: raise ValueError('Total wind speed cannot be negative')
-        beta=np.deg2rad(wind_direction_deg)-eta[5]
-        relative=-speed*np.array([np.cos(beta),np.sin(beta)])-nu[:2]
-        apparent=float(np.linalg.norm(relative))
-        angle=float(np.rad2deg(np.arctan2(-relative[1],-relative[0]))%360) if apparent>1e-12 else 0.
-        return apparent,angle
+        values = np.array([mean_wind_speed, sw_wind_speed, gust_wind_speed,
+                           wind_direction_deg], float)
+        if not np.isfinite(values).all():
+            raise ValueError('Wind inputs must be finite')
+        speed = sum(values[:3])
+        if speed < 0:
+            raise ValueError('Total wind speed cannot be negative')
+        beta = np.deg2rad(wind_direction_deg) - eta[5]
+        relative = -speed*np.array([np.cos(beta), np.sin(beta)]) - nu[:2]
+        apparent = float(np.linalg.norm(relative))
+        if apparent > 1e-12:
+            angle = float(np.rad2deg(np.arctan2(-relative[1], -relative[0])) % 360)
+        else:
+            angle = 0.
+        return apparent, angle
 
     def calculate(self, eta_lf, nu_lf, **wind_inputs):
         """Return [X,Y,0,K,0,N] in body axes (N and N m) for the LF solver.
@@ -117,11 +127,13 @@ class WindLoads:
         Z and M are omitted by this supplied wind model. The explicit minus-angle
         adapter reconciles its lateral signs with clockwise FROM inputs.
         """
-        speed,angle=self.apparent_wind(eta_lf,nu_lf,**wind_inputs)
-        pos=((-angle)%360)/10
-        i=min(int(pos),35);fraction=pos-i
-        cx,cy,cn,ck=(1-fraction)*self.table[i]+fraction*self.table[i+1]
-        p=self.p;q=.5*p['air_density']*speed**2
-        return np.array([q*p['area_frontal']*cx,q*p['area_lateral']*cy,0.,
+        speed, angle = self.apparent_wind(eta_lf, nu_lf, **wind_inputs)
+        pos = ((-angle) % 360) / 10
+        i = min(int(pos), 35)
+        fraction = pos - i
+        cx, cy, cn, ck = (1 - fraction)*self.table[i] + fraction*self.table[i + 1]
+        p = self.p
+        q = .5*p['air_density']*speed**2
+        return np.array([q*p['area_frontal']*cx, q*p['area_lateral']*cy, 0.,
                          q*p['area_lateral']*(p['area_lateral']/p['loa'])*ck,
-                         0.,q*p['area_lateral']*p['loa']*cn])
+                         0., q*p['area_lateral']*p['loa']*cn])

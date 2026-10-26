@@ -1,6 +1,6 @@
-# Gunnerus_OSP_sim – DP co-simulation where each FMU reads the config file itself
+# ospdpsimpy – DP co-simulation in OSP where each FMU reads the config file itself
 
-A complete DP (dynamic positioning) simulator in OSP, with one closed loop of seven FMUs:
+The Python package is `ospfmusim` (in `src/ospfmusim/`). A complete DP (dynamic positioning) simulator in OSP, with one closed loop of seven FMUs:
 
 - **Environment** gives the wind (mean, slowly varying and gust speed, slowly varying direction), the sea state (H_s, T_p, wave direction) and the current, all in the earth-fixed NED frame. See [docs/environment_fmu.md](docs/environment_fmu.md).
 - **Waves** turns the sea state into 100 regular wave components (amplitude, frequency, phase, direction). Regular or irregular (long- or short-crested) sea. See [docs/waves_fmu.md](docs/waves_fmu.md).
@@ -11,11 +11,16 @@ A complete DP (dynamic positioning) simulator in OSP, with one closed loop of se
 
 The results can be read in a small web app, see [Results app](#results-app).
 
-Every constant is in one config file in `configs/` (for example `configs/tests.toml`); `src/ospfmusim/OspSystemStructure.xml` says which one is used by default. Each FMU reads that file itself when the simulation starts, so you can change constants and run again **without rebuilding the FMUs**.
+Every constant is in one config file in `configs/`; `src/ospfmusim/OspSystemStructure.xml` says which one is used by default (`configs/tests.toml`). Each FMU reads that file itself when the simulation starts, so you can change constants and run again **without rebuilding the FMUs**.
 
-This is option **B3** in [Configfile_ways.md](../Configfile_ways.md).
+| Config | Vessel |
+|---|---|
+| `configs/tests.toml` (the default) | Wind geometry and 3-DOF matrices in `[vessel]` are **placeholder values** for an 88 m OSV. The hull hydrodynamics come from the Gunnerus `.mat` file. |
+| `configs/gunnerus.toml` | RV Gunnerus: wind geometry, and 3-DOF matrices copied from the Gunnerus `.mat` file. |
 
-> **Note:** the vessel data in `[vessel_fmu]` (`src/ospfmusim/hull/helpfunctions/example_test_config.json`) and the 3-DOF matrices in `[vessel]` are **synthetic placeholder values** for an 88 m OSV, not RV Gunnerus.
+> **The vessel data file is not in the repository.** Both configs read the hydrodynamic data from `data_examples/GunnerusL35_20201112.mat` (`[vessel_fmu] mat_file`). Put the file there before you run. `src/ospfmusim/hull/helpfunctions/example_test_config.json` is **synthetic** test data, used only by `check_vessel_fmu.py`.
+
+> **Known issue:** with both configs the vessel drifts away after about 25 s, and the run stops at t = 41.5 s with `tau_wind must have shape (6,) and finite values` (the vessel state has become infinite). Runs of 10 s, as below, work.
 
 ## Documentation
 
@@ -31,14 +36,15 @@ This is option **B3** in [Configfile_ways.md](../Configfile_ways.md).
 
 ## Getting started
 
-Run from this folder in the VS Code terminal:
+You need Python 3.11 or newer (the conda environment `master` has 3.12) and the `.mat` file in `data_examples/` (see above). Run from this folder in the VS Code terminal:
 
 ```powershell
 conda activate master
-pip install -r requirements.txt   # once: the libraries the simulation needs
-pip install -e .                  # once: makes ospfmusim and app in src/ importable
+pip install -e .                  # once: installs requirements.txt and makes ospfmusim and app in src/ importable
 python -m ospfmusim.run           # builds the FMUs that have changed, runs, saves to results/<time stamp>/
 ```
+
+`scripts/runsimulationexample.py` is a short example script that runs the simulation and reads the results as pandas DataFrames.
 
 The same from Python, with the `.mat` file, the config and the system structure as arguments:
 
@@ -81,7 +87,7 @@ Every run gets its own folder, `results/<YYYYMMDD_HHMMSS>[_name]/`, with one CSV
 config it was run with. Earlier runs are never overwritten.
 
 **Try it** (no rebuild needed, only `python -m ospfmusim.run` again, or use the [results app](#results-app)):
-- Set `duration = 300.0` in `[simulation]` and look at `vessel_*.csv` in the new run folder: the vessel drifts about 4 m in the first minute, and the controller then brings it back to within 1 m of the set-point.
+- Set `duration = 20.0` in `[simulation]` and look at `vessel_*.csv` in the new run folder (longer runs stop at 41.5 s, see the known issue above).
 - Switch the gusts off with `n_components = 0` in `[wind.gust]`, or the current off with `speed = 0.0` in `[current]`.
 - Change `north_ref` in `[controller]` and watch the vessel move to the new set-point.
 
@@ -104,9 +110,10 @@ All commands are run from this folder, with the `master` environment active (`co
 
 | What | Command |
 |---|---|
-| Install the libraries (once) | `pip install -r requirements.txt` |
-| Make `src/` importable (once) | `pip install -e .` |
-| Install scipy with OpenBLAS (if missing) | `conda install -n master scipy=1.14.1 "libblas=*=*openblas"` |
+| Install the libraries and make `src/` importable (once) | `pip install -e .` |
+| Install only the libraries | `pip install -r requirements.txt` |
+| Install scipy with OpenBLAS (if missing) | `conda install -n master scipy "libblas=*=*openblas"` |
+| Run the example script | `python scripts/runsimulationexample.py` |
 | Run the simulation (Python) | `python -m ospfmusim.run` (options: `--config other.toml`, `--mat other.mat`, `--system other.xml`, `--duration 60`, `--name high_wind`, `--output folder`) |
 | Build the FMUs that have changed | `python -m ospfmusim.build` (`--force` builds every FMU) |
 | Open the results app | `python -m app.run` (or `python src/app/run.py`, or `streamlit run src/app/build/app.py`) |
@@ -141,9 +148,10 @@ Every FMU gets the same copy of the model folders of `src/ospfmusim` (without `t
 | `src/app/run.py` | Starts the results app (`python -m app.run`) | Rarely |
 | `src/app/build/` | The results app (`streamlit run src/app/build/app.py`), and `config_tools.py`, which changes config values as text (also used by `run.py`) | When you want other plots |
 | `docs/` | One document per FMU | When an FMU changes |
-| `data_examples/` | The Gunnerus hydrodynamic data (`.mat`) | When the vessel data changes |
-| `pyproject.toml` | Makes `src/` importable with `pip install -e .` | Rarely |
-| `requirements.txt` | The Python libraries the simulation needs | When a library is added |
+| `data_examples/` | The Gunnerus hydrodynamic data (`.mat`). Not in git: put the file here yourself | When the vessel data changes |
+| `scripts/` | Example scripts, such as `runsimulationexample.py` | When you want another example |
+| `pyproject.toml` | The package: name, license, and `pip install -e .` (the dependencies are read from `requirements.txt`) | Rarely |
+| `requirements.txt` | The Python libraries the simulation needs, with the versions allowed | When a library is added |
 | `src/ospfmusim/fmus/` | The built FMUs | Created by `build.py` |
 | `results/` | One folder per run: one CSV file per FMU with every input and output for each time step, and the run's `config.toml` and `OspSystemStructure.xml` | Created by `run.py` |
 
@@ -219,7 +227,7 @@ In every FMU the variables fall into four kinds. Examples from `src/ospfmusim/en
 
 ## Good to know
 
-- **Relative paths.** `run_simulation()` reads relative paths from the folder Python is started from, and points `config_path` on every FMU to the run's copy of the config, so the FMUs do not depend on that folder. The FMU paths in the XML (`source="fmus/..."`) are relative to the XML file. With cosim CLI you must stand in the repo folder, because `config_path = "configs/tests.toml"` in the XML is read from the folder the simulation is started from (cosim CLI uses the config in the XML directly and writes loose CSV files to the output folder). With OSP-GUI it is safest to write a full path, such as `C:\Users\...\Gunnerus_OSP_sim\configs\tests.toml`, in the XML.
+- **Relative paths.** `run_simulation()` reads relative paths from the folder Python is started from, and points `config_path` on every FMU to the run's copy of the config, so the FMUs do not depend on that folder. The FMU paths in the XML (`source="fmus/..."`) are relative to the XML file. With cosim CLI you must stand in the repo folder, because `config_path = "configs/tests.toml"` in the XML is read from the folder the simulation is started from (cosim CLI uses the config in the XML directly and writes loose CSV files to the output folder). With OSP-GUI it is safest to write a full path, such as `C:\Users\...\ospdpsimpy\configs\tests.toml`, in the XML.
 - **File paths inside a config** (such as `[vessel_fmu] mat_file`) are relative to the config file, so data in the repo folder is written as `../data_examples/...`. `run_simulation()` replaces `mat_file` with the `.mat` file it is given.
 - **An error in an FMU at the start stops Python.** If an FMU raises an exception in `exit_initialization_mode()` (for example a missing key in the config), libcosim prints `Fatal py exception encountered` with the Python error, and the process ends with exit code 127, without a Python traceback. An error later in the run (in `do_step()`) gives the same message, and then `run_simulation()` raises a `RuntimeError`.
 - **Save the config file as UTF-8.** VS Code does this automatically.
@@ -228,11 +236,15 @@ In every FMU the variables fall into four kinds. Examples from `src/ospfmusim/en
 - **Filenames on Windows.** Git cannot check out a file whose name ends with a dot (such as `README.md.`). If `git pull` fails with `invalid path`, rename the file on GitHub.
 - **The CSV files have 6 significant digits**, for example `1.60439e+06`. That is how libcosim writes them.
 
+## Code style
 
+The code follows [PEP 8](https://peps.python.org/pep-0008/), with lines up to 99 characters (PEP 8 allows this). Two exceptions on purpose: matrices and vectors keep the symbols from the literature (`M`, `D`, `R`, `P`, `K`, ...), and the module names in `hull/helpfunctions/` (`LF.py`, `WaveLoads.py`, ...) are kept. To check:
 
-- **cosim CLI:** `cosim run src/ospfmusim/OspSystemStructure.xml -d 10 --output-dir results`
-- **Build the FMUs:** `python -m ospfmusim.build`
+```powershell
+pip install pycodestyle
+pycodestyle --max-line-length=99 src scripts
+```
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The hull calculation modules in `src/ospfmusim/hull/helpfunctions/` are based on the NTNU mcsimpy toolbox and are under GPL-3.0-or-later; see [NOTICE.md](src/ospfmusim/hull/helpfunctions/NOTICE.md) and the [LICENSE](src/ospfmusim/hull/helpfunctions/LICENSE) there.

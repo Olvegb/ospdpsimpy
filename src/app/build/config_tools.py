@@ -42,7 +42,8 @@ def lines_with_keys(text):
             section = None                       # [[...]] tables are not editable
         elif match := SECTION.match(line):
             section = match["name"].strip()
-        elif section is not None and not line.lstrip().startswith("#") and (match := KEY_LINE.match(line)):
+        elif (section is not None and not line.lstrip().startswith("#")
+              and (match := KEY_LINE.match(line))):
             value, spacing, comment = split_comment(match["rest"])
             if value.startswith("[") and not value.endswith("]"):
                 yield line, None, None, None, None, None, None      # start of a multi-line array

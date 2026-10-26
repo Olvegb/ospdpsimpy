@@ -17,7 +17,8 @@ vessel: the hull FMU does that from the wave components sent out here.
 The hull FMU must use exactly this wave elevation (t = simulation time,
 x = north, y = east, direction in radians):
 
-    zeta = sum_k amplitude_k * cos(omega_k * t - k_k * (x cos(direction_k) + y sin(direction_k)) - phase_k)
+    zeta = sum_k amplitude_k * cos(omega_k * t
+                                   - k_k * (x cos(direction_k) + y sin(direction_k)) - phase_k)
     k_k = omega_k^2 / g    (deep water)
 
 See docs/waves_fmu.md.
@@ -37,10 +38,11 @@ N_WAVES = 100
 SLOTS = range(1, N_WAVES + 1)
 
 # Four outputs per wave component: wave1_amplitude, wave1_omega, ...
+# direction_deg is the direction the wave travels TO, NED, clockwise from north, 0-360.
 COMPONENT_OUTPUTS = ("amplitude",       # wave amplitude [m] (half the wave height)
                      "omega",           # frequency [rad/s]
                      "phase",           # phase [rad]
-                     "direction_deg")   # direction the wave travels TO [deg], NED, clockwise from north, 0-360
+                     "direction_deg")   # direction the wave travels TO [deg]
 
 
 class Waves(Fmi2Slave):
@@ -96,10 +98,12 @@ class Waves(Fmi2Slave):
         # sea is only built again when H_s or T_p changes, with the same seed.
         # A new wave direction only turns all the components.
         if (self.H_s, self.T_p) != self._built_for:
-            self.sea, self.kept_energy_fraction = sea_from_settings(self.H_s, self.T_p, self.settings, N_WAVES)
+            self.sea, self.kept_energy_fraction = sea_from_settings(self.H_s, self.T_p,
+                                                                    self.settings, N_WAVES)
             self._built_for = (self.H_s, self.T_p)
 
-        directions_deg = np.degrees(directions_to(self.sea, self.wave_direction_deg, direction_is_from=True))
+        directions_deg = np.degrees(directions_to(self.sea, self.wave_direction_deg,
+                                                  direction_is_from=True))
         for k in SLOTS:
             i = k - 1                                  # the arrays start at 0
             setattr(self, f"wave{k}_amplitude", float(self.sea.amplitudes[i]))
