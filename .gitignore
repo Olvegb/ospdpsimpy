@@ -12,6 +12,7 @@ __pycache__/
 fmus/
 results/
 data_examples/GunnerusL35_20201112.mat
+data_examples/gunnerus_validation_data.zip
 
 # Made by pytest and ruff
 .pytest_cache/

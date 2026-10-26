@@ -20,6 +20,8 @@ import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
 
+import numpy as np
+
 # "azimuth" covers anything that can turn its thrust in any direction (pods too).
 KINDS = ("azimuth", "tunnel", "shaft_line")
 
@@ -53,6 +55,12 @@ class Thruster:
     # Dynamics (dynamics.py). None: the thruster follows its command at once.
     thrust_time_constant: float | None = None  # first-order lag of the thrust [s]
     max_azimuth_rate: float | None = None  # fastest an azimuth turns [deg/s]
+    # Open-water propeller curves (dynamics.py): (J, KT, KQ) rows, J
+    # increasing and covering J = 0, interpolated linearly. Two rows give the
+    # linear model KT = KT0 - alpha_T1*J of Sørensen (2018) (8.10). Needs
+    # diameter. Empty: thrust follows the command, power P_B * r^1.5.
+    open_water: tuple[tuple[float, float, float], ...] = ()
+    wake_fraction: float = 0.0  # w in Va = (1 - w) * speed through the water (8.12)
 
     def __post_init__(self):
         if self.kind not in KINDS:
@@ -66,6 +74,27 @@ class Thruster:
             value = getattr(self, field)
             if value is not None and not value > 0:
                 raise ValueError(f"{self.name}: {field} must be positive, got {value}")
+        if not 0 <= self.wake_fraction < 1:
+            raise ValueError(f"{self.name}: wake_fraction must be in [0, 1), "
+                             f"got {self.wake_fraction}")
+        if self.open_water:
+            if self.diameter is None:
+                raise ValueError(f"{self.name}: open_water needs diameter")
+            if len(self.open_water) < 2 or any(len(row) != 3 for row in self.open_water):
+                raise ValueError(f"{self.name}: open_water needs at least 2 [J, KT, KQ] rows")
+            j = [row[0] for row in self.open_water]
+            if any(b <= a for a, b in zip(j, j[1:])):
+                raise ValueError(f"{self.name}: open_water J must increase, got {j}")
+            if not j[0] <= 0 <= j[-1] or not self.kt0 > 0:
+                raise ValueError(f"{self.name}: open_water must cover J = 0 with KT > 0")
+
+    @property
+    def kt0(self):
+        """KT at J = 0 (bollard pull) from open_water; None without open_water."""
+        if not self.open_water:
+            return None
+        j, kt, _ = zip(*self.open_water)
+        return float(np.interp(0.0, j, kt))
 
     @property
     def reverse_thrust(self):

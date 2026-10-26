@@ -5,6 +5,8 @@
 2. ThrustAllocator + ThrusterDynamics, a Gunnerus-like layout without thrust
    lag, starting at rest with an astern command: the force the dynamics give
    must be the one the allocator says it commands, every step.
+3. Open-water curves: an azimuth at bollard pull gives the commanded thrust,
+   and loses thrust when it moves through the water.
 
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland (2026)
@@ -13,7 +15,7 @@ import numpy as np
 import pytest
 
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
-from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
+from ospfmusim.thruster.helpfunctions.dynamics import RHO, ThrusterDynamics
 from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
 
 RATE = 10.0      # [deg/s]
@@ -91,3 +93,29 @@ def test_tau_reached_and_delivered_after_25_s(allocated):
     tau, commands, states, _ = allocated
     assert not commands[-1].saturated
     np.testing.assert_allclose(states[-1].tau, tau, atol=1.0)
+
+
+# Linear open-water curves KT = 0.36 - 0.32 J, KQ = 0.046 - 0.028 J (Sørensen 2018, (8.10)).
+OPEN_WATER = ((-0.5, 0.52, 0.060), (1.0, 0.04, 0.018))
+D = 2.0
+
+
+def propeller_azimuth():
+    return azimuth(diameter=D, open_water=OPEN_WATER)
+
+
+def test_bollard_pull_gives_the_commanded_thrust():
+    state = propeller_azimuth().step([THRUST], [0.0])
+    n = np.sqrt(THRUST / (RHO * D**4 * 0.36))                     # (8.38)
+    assert state.thrust[0] == pytest.approx(THRUST)
+    assert state.shaft_speed[0] == pytest.approx(n)
+    assert state.torque[0] == pytest.approx(RHO * D**5 * 0.046 * n**2)
+    assert state.power_kw[0] == pytest.approx(2 * np.pi * n * state.torque[0] / 1000)
+
+
+def test_speed_through_the_water_loses_thrust():
+    state = propeller_azimuth().step([THRUST], [0.0], velocity=(2.0, 0.0, 0.0))
+    n = state.shaft_speed[0]
+    ja = 2.0 / (n * D)                                             # (8.6)
+    assert state.thrust[0] < THRUST
+    assert state.thrust[0] == pytest.approx(RHO * D**4 * (0.36 - 0.32 * ja) * n**2)

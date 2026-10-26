@@ -116,6 +116,15 @@ Every time step of length dt it moves each thruster toward its command:
   `N = Σ (x·fy − y·fx)`.
 - **Power.** `P = P_B · r^1.5`, with P_B = `power_kw` and r = |T| / the thruster's limit in that
   direction.
+- **Propeller curves (optional).** A thruster with `open_water` is a speed-controlled propeller
+  (Sørensen 2018, *Marine Cybernetics*, ch. 8). The lagged thrust above is then the nominal thrust
+  Tn. It sets the shaft speed `n = sign(Tn)·√(|Tn| / (ρD⁴KT0))` (8.38), where KT0 = KT(J = 0). The
+  speed V through the water at the thruster, along its thrust, gives `Ja = (1 − w)·V / (n·D)`
+  (8.6). From that, `Ta = ρD⁴·KT(Ja)·n|n|`, `Qa = ρD⁵·KQ(Ja)·n|n|` and `P = 2π·n·Qa`. V comes from
+  the inputs `u`, `v`, `r`, `yaw` and the current. At rest Ta = Tn. With speed through the water
+  Ta < Tn, a thrust loss the DP controller has to make up for. The allocation still counts on
+  KT0, and its bus limits still use `power_kw · r^1.5`. Not modelled: the shaft and motor
+  dynamics (8.30), reverse curves (8.45), and ventilation and interaction losses (8.6).
 
 The thrusters start at rest: zero thrust, azimuths pointing ahead (0°), tunnels at 90°.
 
@@ -125,9 +134,14 @@ The thrusters start at rest: zero thrust, azimuths pointing ahead (0°), tunnels
 | input | `thrusterK_thrust_command` | Real | N | From ThrustAllocation |
 | input | `thrusterK_azimuth_command_deg` | Real | deg | From ThrustAllocation |
 | input | `thrusterK_available` | Boolean | – | False trips thruster K. Default true |
+| input | `u`, `v`, `r` | Real | m/s, m/s, rad/s | Vessel LF velocity, body frame. Only for `open_water`. Default 0 |
+| input | `yaw` | Real | rad | Vessel heading, to turn the current into the body frame. Default 0 |
+| input | `current_north`, `current_east` | Real | m/s | Current velocity, NED. Default 0 |
 | output | `thrusterK_thrust` | Real | N | Actual thrust, same sign convention as the command |
 | output | `thrusterK_azimuth_deg` | Real | deg | Actual direction, in [0°, 360°) |
-| output | `thrusterK_power_kw` | Real | kW | Power of thruster K (0 if it has no `power_kw`) |
+| output | `thrusterK_power_kw` | Real | kW | Power of thruster K: `2π·n·Qa` with `open_water`, else from `power_kw` (0 without either) |
+| output | `thrusterK_shaft_speed` | Real | rps | Shaft speed n, signed like the thrust (0 without `open_water`) |
+| output | `thrusterK_torque` | Real | Nm | Propeller torque Qa (0 without `open_water`) |
 | output | `X` | Real | N | Total thruster force on the vessel, surge |
 | output | `Y` | Real | N | Total thruster force on the vessel, sway |
 | output | `N` | Real | Nm | Total thruster yaw moment on the vessel |
@@ -185,6 +199,10 @@ even if the layout has fewer thrusters; empty slots carry 0.
 <!-- the same for Y and N -->
 ```
 
+**Vessel and environment → dynamics** (six connections, only used by thrusters with
+`open_water`): `vessel.lf_u`, `lf_v`, `lf_r` and `yaw` to `dynamics.u`, `v`, `r` and `yaw`,
+and `environment.current_north` and `current_east` to the dynamics inputs with the same names.
+
 **Failures (optional).** If nothing is connected, every thruster is available. To trip thruster K,
 connect the same Boolean signal to **both** `allocation.thrusterK_available` and
 `dynamics.thrusterK_available`. The dynamics FMU then drops its thrust at once, and the allocation
@@ -240,6 +258,8 @@ max_azimuth_rate = 10.0       # [deg/s]
 | `power_supply` | with `[[power_sources]]` | `[[source name, share], …]`, shares summing to 1 |
 | `thrust_time_constant` | no | Thrust lag [s]. Without it the thrust follows the command at once |
 | `max_azimuth_rate` | no | [deg/s]. Without it the azimuth turns at once |
+| `open_water` | no | Open-water curves `[[J, KT, KQ], …]`, J increasing and covering 0, interpolated linearly (end values held outside). Two rows give the linear model (8.10). Needs `diameter`. Without it there is no propeller model (§4) |
+| `wake_fraction` | no | w in `Va = (1 − w)·V` (8.12). Default 0 |
 
 The thruster layout in `configs/tests.toml` is a made-up ~80 m PSV: two azimuths aft (AZ1 port, AZ2 starboard,
 x = −40 m) and two bow tunnels (BT1, BT2), two 3600 kW switchboards with a 10% reserve. The time

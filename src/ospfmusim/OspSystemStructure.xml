@@ -1756,6 +1756,32 @@
             <Variable simulator="vessel" name="N_thrusters"/>
         </VariableConnection>
 
+        <!-- vessel, environment -> dynamics: speed through the water for the propeller curves -->
+        <VariableConnection>
+            <Variable simulator="vessel" name="lf_u"/>
+            <Variable simulator="dynamics" name="u"/>
+        </VariableConnection>
+        <VariableConnection>
+            <Variable simulator="vessel" name="lf_v"/>
+            <Variable simulator="dynamics" name="v"/>
+        </VariableConnection>
+        <VariableConnection>
+            <Variable simulator="vessel" name="lf_r"/>
+            <Variable simulator="dynamics" name="r"/>
+        </VariableConnection>
+        <VariableConnection>
+            <Variable simulator="vessel" name="yaw"/>
+            <Variable simulator="dynamics" name="yaw"/>
+        </VariableConnection>
+        <VariableConnection>
+            <Variable simulator="environment" name="current_north"/>
+            <Variable simulator="dynamics" name="current_north"/>
+        </VariableConnection>
+        <VariableConnection>
+            <Variable simulator="environment" name="current_east"/>
+            <Variable simulator="dynamics" name="current_east"/>
+        </VariableConnection>
+
         <!-- vessel -> kalman_filter: measured position and heading (total LF + WF motion) -->
         <VariableConnection>
             <Variable simulator="vessel" name="north"/>

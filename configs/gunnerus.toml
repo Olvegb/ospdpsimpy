@@ -296,9 +296,14 @@ power_kw = 500.0               # power at max_thrust [kW]
 power_supply = [["SWBD 1", 1.0]]
 thrust_time_constant = 5.0      # first-order lag of the thrust [s]
 max_azimuth_rate = 10.0         # fastest it turns [deg/s]
+# Open-water curves [[J, KT, KQ], ...], interpolated linearly. PLACEHOLDER:
+# the linear model KT = 0.36 - 0.32 J, KQ = 0.046 - 0.028 J (Sørensen 2018,
+# (8.10); KT0 from Example 8.4.1, slopes read roughly off Fig. 8.5, P/D = 0.89).
+# Replace with real open-water data: add rows.
+open_water = [[-0.5, 0.52, 0.060], [1.0, 0.04, 0.018]]
 
 [[thrusters]]
-name = "AZ2"                    # starboard azimuth
+name = "AZ2"                 # starboard azimuth
 kind = "azimuth"
 x = -16.95
 y = -2.7
@@ -309,6 +314,7 @@ power_kw = 500.0
 power_supply = [["SWBD 2", 1.0]]
 thrust_time_constant = 5.0
 max_azimuth_rate = 10.0
+open_water = [[-0.5, 0.52, 0.060], [1.0, 0.04, 0.018]]   # PLACEHOLDER, see AZ1
 
 [[thrusters]]
 name = "BT1"                    # bow tunnel; positive thrust pushes to starboard
@@ -321,3 +327,4 @@ diameter = 1.0
 power_kw = 200.0
 power_supply = [["SWBD 1", 1.0]]
 thrust_time_constant = 3.0
+open_water = [[-0.5, 0.52, 0.060], [1.0, 0.04, 0.018]]   # PLACEHOLDER, see AZ1
