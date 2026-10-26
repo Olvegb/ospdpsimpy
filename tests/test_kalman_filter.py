@@ -1,22 +1,23 @@
-"""Checks of the ExtendedKalmanFilter FMU (observer/ekf/ekf.py), without OSP.
+"""Tests of the ExtendedKalmanFilter FMU code (observer/ekf/ekf.py), without OSP.
 
 A simple "true" 3-DOF vessel, M nu_dot + D nu = tau + R^T b, is simulated in
 plain Python with the matrices in the config the simulation uses, a constant
 disturbance b in NED and a made-up wave-frequency motion added on top. The
 filter gets the total motion as measurement and must split it into LF and WF.
 
-Checks:
   1. The LF estimate follows the true LF motion, and is much smoother than
      the measurement (the WF motion is filtered out).
   2. The WF estimate follows the true WF motion.
   3. The bias estimate converges to the true disturbance.
   4. Heading wrap: a heading near +-pi gives no jump in the estimate.
 
-Run from the repo folder:  python src/ospfmusim/observer/ekf/tests/check_kalman_filter.py
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import tomllib
 
 import numpy as np
+import pytest
 
 from app.build.data import default_config
 from ospfmusim.observer.ekf.ekf import ExtendedKalmanFilter, rotation, wrap_angle
@@ -98,42 +99,36 @@ def rms(x):
     return np.sqrt(np.mean(x ** 2, axis=0))
 
 
-def check_lf_wf_split():
+@pytest.fixture(scope="module")
+def ten_minutes():
+    """Ten minutes of truth and filter. Returns the last five minutes, and the true bias."""
     log, b = simulate(600.0)
     late = log["t"] > 300.0
-    lf_error = log["eta_hat"][late] - log["eta"][late]
-    lf_error[:, 2] = wrap_angle(lf_error[:, 2])
-    wf_true = log["eta_w"][late]
-    wf_error = log["eta_w_hat"][late] - wf_true
+    return {k: v[late] for k, v in log.items()}, b
 
-    print("1. LF estimate vs truth (last 300 s)")
-    print(f"   RMS LF error      [m, m, rad]: {np.round(rms(lf_error), 4)}")
-    print(f"   RMS WF amplitude  [m, m, rad]: {np.round(rms(wf_true), 4)}")
-    assert np.all(rms(lf_error) < 0.3 * rms(wf_true)), \
+
+def test_lf_estimate_follows_the_lf_motion(ten_minutes):
+    log, _ = ten_minutes
+    lf_error = log["eta_hat"] - log["eta"]
+    lf_error[:, 2] = wrap_angle(lf_error[:, 2])
+    assert np.all(rms(lf_error) < 0.3 * rms(log["eta_w"])), \
         "the LF estimate still contains much of the WF motion"
 
-    print("2. WF estimate vs truth (last 300 s)")
-    print(f"   RMS WF error      [m, m, rad]: {np.round(rms(wf_error), 4)}")
-    assert np.all(rms(wf_error) < 0.3 * rms(wf_true)), \
+
+def test_wf_estimate_follows_the_wf_motion(ten_minutes):
+    log, _ = ten_minutes
+    wf_error = log["eta_w_hat"] - log["eta_w"]
+    assert np.all(rms(wf_error) < 0.3 * rms(log["eta_w"])), \
         "the WF estimate does not follow the WF motion"
 
-    print("3. Bias estimate vs truth (mean of last 300 s)")
-    b_hat = log["b_hat"][late].mean(axis=0)
-    print(f"   true  [N, N, Nm]: {b}")
-    print(f"   est.  [N, N, Nm]: {np.round(b_hat, 0)}")
-    assert np.all(np.abs(b_hat - b) < 0.15 * np.abs(b)), \
-        "the bias estimate is off by more than 15 %"
+
+def test_bias_estimate_converges(ten_minutes):
+    log, b = ten_minutes
+    b_hat = log["b_hat"].mean(axis=0)
+    assert np.all(np.abs(b_hat - b) < 0.15 * np.abs(b)), "the bias estimate is off by more than 15 %"
 
 
-def check_heading_wrap():
+def test_heading_near_pi_gives_no_jump():
     log, _ = simulate(120.0, psi_0=np.pi - 0.005)
     jumps = np.abs(np.diff(np.unwrap(log["eta_hat"][:, 2])))
-    print("4. Heading near +-pi")
-    print(f"   largest step in psi_hat: {jumps.max():.4f} rad")
     assert jumps.max() < 0.05, "psi_hat jumps when the heading crosses +-pi"
-
-
-if __name__ == "__main__":
-    check_lf_wf_split()
-    check_heading_wrap()
-    print("All Kalman filter checks passed.")
