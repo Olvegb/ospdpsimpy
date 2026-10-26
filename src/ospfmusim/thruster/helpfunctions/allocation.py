@@ -206,8 +206,8 @@ def _held_at(thruster, angle_deg, zones):
         return _no_force()
     a = np.deg2rad(angle_deg)
     along, across = np.array([np.cos(a), np.sin(a)]), np.array([-np.sin(a), np.cos(a)])
-    return (np.array([along, -along, across, -across]), np.array([thruster.max_thrust, 0.0, 0.0, 0.0]),
-            np.ones(4, dtype=bool))
+    return (np.array([along, -along, across, -across]),
+            np.array([thruster.max_thrust, 0.0, 0.0, 0.0]), np.ones(4, dtype=bool))
 
 
 def _size_rows(thruster, n_sides):
@@ -321,7 +321,8 @@ def _setup(thrusters, n_sides, flushing, power_sources, available):
             usable=np.array([usable_power_kw(s) for s in power_sources]) / p_ref,
         )
     size_owner = np.concatenate([[i] * len(s) for i, s in enumerate(sizes)])
-    return _Setup(options, _place(sizes, n), size_owner, t_ref, power, shares, [zones.get(i, []) for i in range(n)])
+    return _Setup(options, _place(sizes, n), size_owner, t_ref, power, shares,
+                  [zones.get(i, []) for i in range(n)])
 
 
 def _problem(thrusters, tau, pieces, s):
@@ -677,17 +678,21 @@ class ThrustAllocator:
         kinds = [t.kind for t in thrusters]
         azimuth = np.array([k == "azimuth" for k in kinds])
         # Where the azimuths should point; an idle one keeps its angle.
-        angle = np.where(azimuth & ~np.isnan(allocation.angle_deg), allocation.angle_deg, self._angle)
+        angle = np.where(azimuth & ~np.isnan(allocation.angle_deg), allocation.angle_deg,
+                         self._angle)
         if dt is not None:
-            reach = np.array([np.inf if t.max_azimuth_rate is None else t.max_azimuth_rate * dt for t in thrusters])
+            reach = np.array([np.inf if t.max_azimuth_rate is None else t.max_azimuth_rate * dt
+                              for t in thrusters])
             # Shortest signed arc, in [-180, 180), as in ThrusterDynamics.
             error = (angle - self._angle + 180.0) % 360.0 - 180.0
             angle = (self._angle + np.clip(error, -reach, reach)) % 360.0
             if np.any(np.abs(error) > reach):
                 # One can't get there yet: allocate again with the azimuths where they can be.
-                options =[[_held_at(t, a, s.zones[i])] if azimuth[i] and available[i] else s.options[i]
+                options = [[_held_at(t, a, s.zones[i])] if azimuth[i] and available[i]
+                           else s.options[i]
                            for i, (t, a) in enumerate(zip(thrusters, angle))]
-                allocation, saturated = _allocate_step(thrusters, tau, replace(s, options=options), weights)
+                allocation, saturated = _allocate_step(thrusters, tau,
+                                                       replace(s, options=options), weights)
         self._angle = angle
 
         fx, fy = allocation.fx, allocation.fy

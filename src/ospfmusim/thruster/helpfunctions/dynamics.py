@@ -104,15 +104,18 @@ class ThrusterDynamics:
         reach = np.array([np.inf if t.max_azimuth_rate is None else t.max_azimuth_rate * dt
                           for t in self.thrusters])
         turning = self._azimuth & available
-        self.azimuth_deg = np.where(turning, (self.azimuth_deg + np.clip(error, -reach, reach)) % 360.0,
-                                    self.azimuth_deg)
+        turned = (self.azimuth_deg + np.clip(error, -reach, reach)) % 360.0
+        self.azimuth_deg = np.where(turning, turned, self.azimuth_deg)
 
         # An azimuth still turning pushes with cos of what is left of the turn,
         # and not at all beyond 90 deg, so it doesn't push the wrong way.
-        left = np.where(self._azimuth, (azimuth_cmd_deg - self.azimuth_deg + 180.0) % 360.0 - 180.0, 0.0)
-        lag = np.array([1.0 if t.thrust_time_constant is None else 1.0 - np.exp(-dt / t.thrust_time_constant)
+        left = (azimuth_cmd_deg - self.azimuth_deg + 180.0) % 360.0 - 180.0
+        left = np.where(self._azimuth, left, 0.0)
+        lag = np.array([1.0 if t.thrust_time_constant is None
+                        else 1.0 - np.exp(-dt / t.thrust_time_constant)
                         for t in self.thrusters])
-        target = np.clip(thrust_cmd, self._low, self._high) * np.maximum(np.cos(np.deg2rad(left)), 0.0)
+        target = (np.clip(thrust_cmd, self._low, self._high)
+                  * np.maximum(np.cos(np.deg2rad(left)), 0.0))
         self.thrust = np.where(available, self.thrust + (target - self.thrust) * lag, 0.0)
 
         alpha = np.deg2rad(self.azimuth_deg)
