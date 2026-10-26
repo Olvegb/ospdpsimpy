@@ -4,6 +4,9 @@ The edited values are written into a copy of the config (config_tools.set_values
 which keeps the comments), and ospfmusim/run.py runs with that copy. The run
 gets its own folder in results/ with the copy saved as config.toml.
 The files in configs/ only change when "Save as default" is pressed.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import re
 import subprocess

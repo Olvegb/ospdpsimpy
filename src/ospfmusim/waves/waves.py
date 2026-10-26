@@ -22,6 +22,9 @@ x = north, y = east, direction in radians):
     k_k = omega_k^2 / g    (deep water)
 
 See docs/waves_fmu.md.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import numpy as np
 from pythonfmu import Fmi2Causality, Fmi2Slave, Fmi2Variability, Real, String

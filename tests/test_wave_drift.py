@@ -1,4 +1,8 @@
-"""Analytical checks independent of the fast single-sum implementation."""
+"""Analytical tests of the wave drift, independent of the fast single-sum implementation.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Araz, Olve Grønås Birkeland (2026)
+"""
 import unittest
 from unittest.mock import patch
 

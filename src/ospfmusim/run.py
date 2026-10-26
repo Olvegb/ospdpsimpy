@@ -23,6 +23,9 @@ model code has changed (see build.py). Every run gets its own folder,
 results/<YYYYMMDD_HHMMSS>[_name]/ in the repo folder, with one CSV per FMU and
 a copy of the config (config.toml) and the system structure it was run with.
 Nothing from earlier runs is overwritten.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 import argparse
 import re

@@ -1,7 +1,7 @@
 """Tests of the sea state (waves/helpfunctions/sea_state.py).
 
 License: MIT (see LICENSE in the repository root)
-Authors: Olve Grønås Birkeland, viljartveit (2026)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import numpy as np
 import pytest

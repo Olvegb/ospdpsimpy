@@ -5,6 +5,9 @@ The spectrum is one-sided, so the area under it is m0 = Hs^2 / 16.
 
 References:
 - Sørensen, Marine Control Systems, section 6.2.1
+
+License: MIT (see LICENSE in the repository root)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import math
 

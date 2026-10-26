@@ -16,6 +16,9 @@ From the repo folder, with the conda environment master active:
 
     python -m ospfmusim.build            # build the FMUs that have changed
     python -m ospfmusim.build --force    # build every FMU again
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland, William Boland, Viljar Simonnes Tveit, Araz (2026)
 """
 import argparse
 import os
@@ -42,16 +45,16 @@ FMUS = {
 }
 
 # Folders that are not copied into the FMUs.
-SKIPPED_FOLDERS = {"fmus", "tests", "__pycache__"}
+SKIPPED_FOLDERS = {"fmus", "__pycache__"}
 
 
 def model_files():
-    """The files every FMU gets a copy of: the model folders, without tests.
+    """The files every FMU gets a copy of: the model folders and the package's __init__.py.
 
-    The files directly in src/ospfmusim (build.py, run.py and
+    The other files directly in src/ospfmusim (build.py, run.py and
     OspSystemStructure.xml) are tools, not models, and are left out.
     """
-    files = []
+    files = [PACKAGE / "__init__.py"]
     for path in PACKAGE.rglob("*"):
         parts = path.relative_to(PACKAGE).parts
         if path.is_file() and len(parts) > 1 and not SKIPPED_FOLDERS.intersection(parts):

@@ -1,4 +1,8 @@
-"""Wave-frequency vessel motion from Motion RAOs and wave components."""
+"""Wave-frequency vessel motion from Motion RAOs and wave components.
+
+License: GPL-3.0-or-later (see LICENSE and NOTICE.md in this folder)
+Authors: Araz, Olve Grønås Birkeland (2026)
+"""
 
 import numpy as np
 

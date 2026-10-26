@@ -7,7 +7,7 @@ relative to the set-point in the config, and the force is checked in NED, so
 the tests hold for any set-point and heading.
 
 License: MIT (see LICENSE in the repository root)
-Authors: Olve Grønås Birkeland, viljartveit (2026)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import tomllib
 

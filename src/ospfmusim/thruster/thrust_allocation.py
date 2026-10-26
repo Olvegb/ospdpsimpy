@@ -18,6 +18,9 @@ The FMU's life cycle:
   3. exit_initialization_mode   Runs once, right before the simulation
                                 starts. The config file is read here.
   4. do_step                    Runs every time step. The allocation runs here.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 from pythonfmu import Boolean, Fmi2Causality, Fmi2Slave, Fmi2Variability, Real, String
 

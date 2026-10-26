@@ -4,6 +4,9 @@ Thruster dynamics: each thruster follows its command, and the force it gives the
 The commands are those of allocation.ThrustAllocator: a thrust T [N] along
 a direction alpha [deg] (layout.py), alpha fixed at 90 deg for tunnels and
 0 deg for shaft lines. Every kind then pushes with f = T * (cos alpha, sin alpha).
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 from dataclasses import dataclass
 

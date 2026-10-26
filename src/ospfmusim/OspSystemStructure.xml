@@ -7,23 +7,9 @@
   The FMU paths (source="fmus/...") are relative to this file. build.py builds
   the FMUs into fmus/ next to it.
 
-  Signal flow (one closed DP loop):
-
-    environment ──► wind (mean, slowly varying, gust, direction), current ─────────┐
-         │                                                                         │
-         └──► H_s, T_p, wave_direction ──► waves ──► wave<k>_* (k = 1..100) ───────┤
-                                                                                   ▼
-    dynamics ──► X, Y, N (delivered thrust, body) ──────────────────────────────► vessel
-       ▲  │                                                                        │
-       │  └──► tau_thr_x/y/n ──────────────┐            north, east, yaw ──────────┤
-       │                                   ▼                                       │
-       │                             kalman_filter ◄── tau_wind_x/y/n (wind_X/Y/N) ┘
-       │                                   │
-       │                                   ▼  north_hat ... r_hat
-       │                             dp_controller
-       │                                   │
-       │                                   ▼  tau_X/Y/N_P, _I, _D (summed in allocation)
-       └── thrust + azimuth command ◄── allocation      (8 thruster slots)
+  Signal flow: one closed DP loop, environment -> waves -> vessel ->
+  kalman_filter -> dp_controller -> allocation -> dynamics -> vessel. The
+  diagram is in "How it fits together" in README.md.
 
   Notes:
     - Frames: environment and waves in NED; forces and velocities in the

@@ -4,7 +4,7 @@ Reads [waves] from the config the simulation uses and builds the sea ONLY from
 that, the same way the Waves FMU does it.
 
 License: MIT (see LICENSE in the repository root)
-Authors: Olve Grønås Birkeland, viljartveit (2026)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import tomllib
 

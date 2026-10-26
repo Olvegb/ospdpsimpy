@@ -19,6 +19,9 @@ The FMU's life cycle:
                                 starts. The config file is read here.
   4. do_step                    Runs every time step. The thrusters move
                                 step_size seconds toward their commands.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 import math
 

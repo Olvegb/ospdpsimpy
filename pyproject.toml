@@ -1,8 +1,9 @@
 # Install once, in the repo folder, with the conda environment master active:
 #
-#     pip install -e .
+#     pip install -e ".[test]"
 #
-# This also installs the libraries in requirements.txt.
+# This also installs the libraries in requirements.txt, and pytest and fmpy for
+# the tests in tests/ (leave out [test] if you only run the simulation).
 
 [build-system]
 # setuptools 77 or newer for the SPDX license field (PEP 639).
@@ -27,6 +28,12 @@ license-files = [
     "src/ospfmusim/hull/helpfunctions/NOTICE.md",
 ]
 dynamic = ["version", "dependencies"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "fmpy>=0.3.32,<0.4",   # tests/test_vessel_fmu.py: runs the built VesselBlock FMU
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -67,6 +74,12 @@ ospfmusim = [
     "hull/helpfunctions/LICENSE",
     "hull/helpfunctions/NOTICE.md",
 ]
+
+[tool.pytest.ini_options]
+# python -m pytest runs every test in tests/. src/ is put on the path, so the
+# tests also run without pip install -e .
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.setuptools_scm]
 # Basic setuptools-scm config: derive version from git tags.

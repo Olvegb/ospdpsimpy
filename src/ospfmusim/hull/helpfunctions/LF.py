@@ -1,3 +1,8 @@
+"""Low-frequency (LF) 6-DOF vessel motion.
+
+License: GPL-3.0-or-later (see LICENSE and NOTICE.md in this folder)
+Authors: Araz, Olve Grønås Birkeland (2026)
+"""
 import numpy as np
 
 

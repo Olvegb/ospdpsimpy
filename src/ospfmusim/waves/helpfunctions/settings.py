@@ -5,6 +5,9 @@ way the thruster FMUs call helpfunctions.layout.load_layout().
 
 Hs, Tp and the wave direction are NOT read here: they come from the
 Environment FMU as inputs. Environment reads them from the same [waves] section.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import tomllib
 from pathlib import Path

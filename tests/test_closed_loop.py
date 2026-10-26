@@ -13,7 +13,7 @@ The vessel starts away from the set-point and must come back and stay there,
 also with the constant force pushing it away. That needs the I term.
 
 License: MIT (see LICENSE in the repository root)
-Authors: Olve Grønås Birkeland, viljartveit (2026)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import tomllib
 

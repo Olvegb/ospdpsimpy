@@ -19,6 +19,9 @@ does, and both the FMU (waves/waves.py) and the tests use that function.
 
 References:
 - Sørensen, Marine Control Systems, section 6.2.1 (eq. 6.1, 6.6, 6.22)
+
+License: MIT (see LICENSE in the repository root)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 from dataclasses import dataclass
 

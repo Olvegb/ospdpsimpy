@@ -37,6 +37,9 @@ Every time step the filter
   2. corrects the prediction with the new measurement.
 
 Units: SI, angles in radians. The bias is in NED, the forces tau in the body frame.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import tomllib
 from math import pi

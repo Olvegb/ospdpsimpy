@@ -36,6 +36,9 @@ Wind direction (where the wind comes from, clockwise from north):
 A part is switched off by setting it to 0 in the config file: std = 0 for
 V_sv, n_components = 0 for V_gust, rate_deg_per_s = 0 and std_deg = 0 for
 the direction.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Olve Grønås Birkeland (2026)
 """
 import random
 import tomllib

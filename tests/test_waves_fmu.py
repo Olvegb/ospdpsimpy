@@ -5,7 +5,7 @@ set config_path and the inputs -> exit_initialization_mode() -> do_step() again
 and again. This works on any computer, also on Mac.
 
 License: MIT (see LICENSE in the repository root)
-Authors: Olve Grønås Birkeland, viljartveit (2026)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
 """
 import re
 import tomllib

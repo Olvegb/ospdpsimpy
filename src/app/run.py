@@ -10,6 +10,9 @@ Extra arguments go to Streamlit, for example another port:
     python -m app.run --server.port 8502
 
 Stop the app with Ctrl+C in the terminal. See docs/app.md.
+
+License: MIT (see LICENSE in the repository root)
+Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 import subprocess
 import sys

@@ -1,6 +1,9 @@
 """Load Gunnerus hydrodynamic data from MATLAB into the vessel simulator.
 
 Click Run in VS Code to check every matrix. No FMU or JSON is created.
+
+License: GPL-3.0-or-later (see LICENSE and NOTICE.md in this folder)
+Authors: Araz, Olve Grønås Birkeland (2026)
 """
 from pathlib import Path
 
