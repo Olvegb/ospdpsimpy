@@ -49,20 +49,25 @@ air_density = 1.226             # [kg/m^3], DNV-ST-0111 [3.5]
 #  Wind
 # ---------------------------------------------------------------------
 #   wind speed     = mean + slowly varying + gust
+#   (Sorensen, Marine Cybernetics lecture notes 2018, section 6.2.2)
+#   mean = mean_speed * log profile at reference_height
 #   wind direction = mean + rate * t + slowly varying
 # Switch a part off by setting it to 0: std = 0, n_components = 0,
 # or rate_deg_per_s = 0 and std_deg = 0.
 
 [wind]
-mean_speed = 15.0               # mean wind speed, 1-hour mean [m/s]
+mean_speed = 15.0               # U10, 1-hour mean wind speed at 10 m [m/s]
 direction_deg = 0.0             # mean direction the wind comes from [deg]
-reference_height = 10.0         # height the wind speed is given for [m]
+reference_height = 10.0         # height z the wind is calculated for; mean_speed is at 10 m [m]
+surface_drag_coefficient = 0.0026  # kappa, sea surface drag coefficient, for the height profile
 seed = 1                        # random seed; same seed = same wind
 
 # Slowly varying wind speed: first-order Gauss-Markov process.
 [wind.slowly_varying]
 time_constant = 300.0           # T, how slowly it changes [s]
 std = 1.0                       # standard deviation [m/s]
+min_speed = 0.0                 # lower limit on mean + slowly varying [m/s]
+max_speed = 30.0                # upper limit on mean + slowly varying [m/s]
 
 # Gusts: harmonics from the NORSOK N-003 / ISO 19901-1 (Froya) spectrum.
 # Keep f_min above the slowly varying band (about 1/(2 pi T) Hz), so the
