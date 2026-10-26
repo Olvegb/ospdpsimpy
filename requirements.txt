@@ -5,11 +5,18 @@
 # Install:  pip install -r requirements.txt   (also works inside the conda env)
 # In a conda env, use OpenBLAS, not MKL: numpy.linalg with MKL crashes Python
 # silently on the NTNU virtual PC.  conda install "libblas=*=*openblas"
-numpy==2.5.3         # every FMU that does matrix maths (vessel, Kalman filter, thrusters)
-scipy==1.18.1        # ThrustAllocation: linprog (HiGHS); vessel_cosim: loadmat (.mat hydrodynamics)
-pandas               # run_simulation.py: reads the result CSVs
-pythonfmu==0.7.0     # build_fmus.py (the version the FMUs in fmus/ were built with)
-libcosimpy==0.0.6    # run_simulation.py: runs OspSystemStructure.xml
-streamlit            # app/: the results app
-plotly               # app/: plots in the results app
-fmpy                 # tests/vessel/check_vessel_fmu.py: runs the built VesselBlock FMU
+#
+# Tested with the conda env master (Python 3.12): numpy 2.5.3, scipy 1.18.1,
+# pandas 3.0.6, pythonfmu 0.7.0, libcosimpy 0.0.6, streamlit 1.66.0,
+# plotly 7.1.0, fmpy 0.3.32.
+# Ranges stop before the next major version. pythonfmu and libcosimpy are
+# pinned exactly: the FMUs in fmus/ are built with that pythonfmu, and
+# libcosimpy 0.0.x can change its API in any release.
+numpy>=2.0,<3        # every FMU that does matrix maths (vessel, waves, Kalman filter, controller, thrusters), app/build/
+scipy>=1.13,<2       # thruster/helpfunctions/allocation.py: linprog (HiGHS); hull/helpfunctions/Wamit.py: loadmat (.mat hydrodynamics)
+pandas>=3.0,<4       # ospfmusim/run.py and app/build/data.py: read the result CSVs
+pythonfmu==0.7.0     # every FMU (Fmi2Slave); ospfmusim/build.py runs "python -m pythonfmu build"
+libcosimpy==0.0.6    # ospfmusim/run.py: runs OspSystemStructure.xml
+streamlit>=1.66,<2   # app/: the results app (app/run.py runs "python -m streamlit run")
+plotly>=7.1,<8       # app/build/app.py and footprint.py: plots in the results app
+fmpy>=0.3.32,<0.4    # hull/tests/check_vessel_fmu.py: runs the built VesselBlock FMU

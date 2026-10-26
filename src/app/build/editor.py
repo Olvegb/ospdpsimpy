@@ -23,7 +23,8 @@ import data
 # edited in the config file itself.
 GROUPS = [
     ("Simulation", ["simulation"]),
-    ("Wind", ["environment", "wind", "wind.slowly_varying", "wind.gust", "wind.direction_variation"]),
+    ("Wind", ["environment", "wind", "wind.slowly_varying", "wind.gust",
+              "wind.direction_variation"]),
     ("Waves", ["waves", "waves.spectrum", "waves.spreading", "waves.discretization"]),
     ("Current", ["current"]),
     ("Vessel", ["vessel"]),
@@ -67,14 +68,17 @@ def widget(section, key, value, help_text, prefix, choices):
     if isinstance(value, str):
         options = choices.get((section, key))
         if options and value in options:
-            return st.selectbox(label, options, index=options.index(value), help=help_text, key=wkey)
+            return st.selectbox(label, options, index=options.index(value), help=help_text,
+                                key=wkey)
         return st.text_input(label, value=value, help=help_text, key=wkey)
     if isinstance(value, int):
         return int(st.number_input(label, value=value, step=1, help=help_text, key=wkey))
     if isinstance(value, float):
         return float(st.number_input(label, value=value, step=nice_step(value), format="%g",
                                      help=help_text, key=wkey))
-    if isinstance(value, list) and value and len(value) <= 3 and all(isinstance(v, (int, float)) for v in value):
+    short_number_list = (isinstance(value, list) and value and len(value) <= 3
+                         and all(isinstance(v, (int, float)) for v in value))
+    if short_number_list:
         st.markdown(f"<small>{label}</small>", unsafe_allow_html=True, help=help_text)
         columns = st.columns(len(value))
         out = []
@@ -89,7 +93,8 @@ def widget(section, key, value, help_text, prefix, choices):
         if len(items) != len(value):
             return ValueError(f"{key}: give {len(value)} comma-separated values")
         try:
-            return [type(v)(tomllib.loads(f"x = {item.strip()}")["x"]) for v, item in zip(value, items)]
+            return [type(v)(tomllib.loads(f"x = {item.strip()}")["x"])
+                    for v, item in zip(value, items)]
         except (tomllib.TOMLDecodeError, TypeError, ValueError) as error:
             return ValueError(f"{key}: {error}")    # shown to the user below the form
     st.text(f"{label} = {value!r} (edit in the config file)")
@@ -132,8 +137,8 @@ def render():
     default = data.default_config()
     start = next((i for i, (_, path) in enumerate(configs) if path == default), 0)
     source_label = st.selectbox("Start from", labels, index=start,
-                                help="The values below start from this config. The default is the one "
-                                     "OspSystemStructure.xml points to.")
+                                help="The values below start from this config. The default is "
+                                     "the one OspSystemStructure.xml points to.")
     source = dict(sources)[source_label]
     # Save as default writes to the chosen file in configs/, or the default one for a run's config.
     target_index = labels.index(source_label) if source_label in dict(configs) else start
@@ -144,12 +149,14 @@ def render():
     keys = editable_keys(base_text)
     prefix = source_label                        # new widgets when the source changes
 
-    st.caption("Change values and press **Run simulation**. The run gets its own folder in results/ with "
-               "the config it used. The files in configs/ are only changed by **Save as default**. The "
-               "vessel matrices, the Blendermann table and the thruster layout are edited in the file itself.")
+    st.caption("Change values and press **Run simulation**. The run gets its own folder in "
+               "results/ with the config it used. The files in configs/ are only changed by "
+               "**Save as default**. The vessel matrices, the Blendermann table and the thruster "
+               "layout are edited in the file itself.")
 
     values = {}
-    # enter_to_submit=False: Enter in a field does nothing; only a click on a button runs or saves.
+    # enter_to_submit=False: Enter in a field does nothing; only a click on a button runs or
+    # saves.
     with st.form("new_run", enter_to_submit=False):
         name = st.text_input("Run name (optional)", placeholder="for example high_wind",
                              help="Added to the folder name: results/<time stamp>_<name>")
@@ -163,12 +170,13 @@ def render():
                     columns = st.columns(3)
                     for i, (s, k) in enumerate(section_keys):
                         with columns[i % 3]:
-                            values[(s, k)] = widget(s, k, lookup(base, s, k), help_texts.get((s, k)),
-                                                    prefix, choices)
+                            values[(s, k)] = widget(s, k, lookup(base, s, k),
+                                                    help_texts.get((s, k)), prefix, choices)
         run_clicked = st.form_submit_button("Run simulation", type="primary")
-        target_label = st.selectbox("Save as default in", [label for label, _ in configs], index=target_index,
-                                    key=f"{prefix}|save_target",
-                                    help="The file in configs/ that **Save as default** writes to.")
+        target_label = st.selectbox("Save as default in", [label for label, _ in configs],
+                                    index=target_index, key=f"{prefix}|save_target",
+                                    help="The file in configs/ that **Save as default** "
+                                         "writes to.")
         save_clicked = st.form_submit_button("Save as default")
 
     if not (run_clicked or save_clicked):
@@ -194,10 +202,12 @@ def render():
             st.info(f"{target_label} already has these values.")
         return
 
-    st.write(f"{len(changes)} value(s) changed from {source_label}:" if changes else f"No changes from {source_label}.")
+    st.write(f"{len(changes)} value(s) changed from {source_label}:" if changes
+             else f"No changes from {source_label}.")
     for (s, k), v in changes.items():
         st.markdown(f"- [{s}] **{k}**: {lookup(base, s, k)} → {v}")
-    config_text = config_tools.set_values(config_tools.make_paths_absolute(base_text, source.parent), changes)
+    absolute_text = config_tools.make_paths_absolute(base_text, source.parent)
+    config_text = config_tools.set_values(absolute_text, changes)
     duration = changes.get(("simulation", "duration"), lookup(base, "simulation", "duration"))
     with st.spinner(f"Running the simulation ({duration} s simulated) ..."):
         ok, output, folder = run_simulation(config_text, name)

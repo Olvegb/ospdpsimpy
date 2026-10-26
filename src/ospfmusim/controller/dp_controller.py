@@ -87,7 +87,8 @@ def pid_gains(mass_matrix, damping_matrix, natural_frequency, damping_ratio):
 class DPController(Fmi2Slave):
 
     author = "Viljar Simonnes Tveit"
-    description = "Simple DP controller: PID on position and heading, commanded force tau in the body frame"
+    description = ("Simple DP controller: PID on position and heading, commanded force tau in "
+                   "the body frame")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -111,7 +112,8 @@ class DPController(Fmi2Slave):
         self.reference = None                    # [north_ref, east_ref, psi_ref] [m, m, rad]
         self.kp = self.ki = self.kd = None       # gains per degree of freedom
         self.integral_limit = None               # largest |Ki z| [N, N, Nm]
-        self.z = np.zeros(3)                     # integral of the body-frame error [m s, m s, rad s]
+        # Integral of the body-frame error [m s, m s, rad s]
+        self.z = np.zeros(3)
 
     def exit_initialization_mode(self):
         if not self.config_path:
@@ -135,7 +137,8 @@ class DPController(Fmi2Slave):
         eta = np.array([self.north_hat, self.east_hat, self.psi_hat])
         nu = np.array([self.u_hat, self.v_hat, self.r_hat])
 
-        # Error in NED, with the heading error wrapped to [-pi, pi), then rotated into the body frame.
+        # Error in NED, with the heading error wrapped to [-pi, pi), then rotated into the
+        # body frame.
         e_ned = eta - self.reference
         e_ned[2] = wrap_angle(e_ned[2])
         e = rotation(self.psi_hat).T @ e_ned

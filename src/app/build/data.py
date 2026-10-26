@@ -60,7 +60,8 @@ def list_runs(results=RESULTS):
     results = Path(results)
     if not results.is_dir():
         return []
-    runs = [(d.name, d) for d in sorted(results.iterdir(), reverse=True) if d.is_dir() and any(d.glob("*.csv"))]
+    runs = [(d.name, d) for d in sorted(results.iterdir(), reverse=True)
+            if d.is_dir() and any(d.glob("*.csv"))]
     if any(results.glob("*.csv")):
         runs.append(("results/ (loose files)", results))
     return runs
@@ -100,7 +101,8 @@ def load_config(path):
 
 def thruster_slots(config):
     """[(slot number, name)] for the thrusters in config.toml, in slot order."""
-    return [(k, thruster["name"]) for k, thruster in enumerate(config.get("thrusters", []), start=1)]
+    thrusters = config.get("thrusters", [])
+    return [(k, thruster["name"]) for k, thruster in enumerate(thrusters, start=1)]
 
 
 def total_wind_speed(environment):
@@ -113,7 +115,10 @@ ENVIRONMENT_REFERENCE = {"Wind": 20.0, "Waves": 5.0, "Current": 1.0}
 
 
 def position_std(vessel):
-    """Standard deviation of the distance from the mean position [m], sqrt(var north + var east)."""
+    """Standard deviation of the distance from the mean position [m].
+
+    sqrt(var north + var east).
+    """
     return (vessel["north"].var() + vessel["east"].var()) ** 0.5
 
 

@@ -1,4 +1,6 @@
-"""Extended Kalman filter (EKF) FMU: estimates the vessel's LF and WF motion and slowly varying disturbances.
+"""Extended Kalman filter (EKF) FMU.
+
+Estimates the vessel's LF and WF motion and slowly varying disturbances.
 
 A 3-DOF DP observer (surge, sway, yaw) after Fossen, with 15 states:
 
@@ -65,7 +67,8 @@ def wrap_angle(angle):
 
 
 INPUTS = (
-    "north_meas", "east_meas", "psi_meas",   # measurements of the total motion: GNSS [m] and gyro [rad]
+    # Measurements of the total motion: GNSS [m] and gyro [rad]
+    "north_meas", "east_meas", "psi_meas",
     "tau_thr_x", "tau_thr_y", "tau_thr_n",   # thruster forces, body frame [N, N, Nm]
     "tau_wind_x", "tau_wind_y", "tau_wind_n",  # wind forces (feed-forward), body frame [N, N, Nm]
 )
@@ -80,7 +83,8 @@ OUTPUTS = (
 class ExtendedKalmanFilter(Fmi2Slave):
 
     author = "Olve Grønås Birkeland"
-    description = "Extended Kalman filter: 3-DOF DP observer with LF, WF and bias estimates (RK4 prediction)"
+    description = ("Extended Kalman filter: 3-DOF DP observer with LF, WF and bias estimates "
+                   "(RK4 prediction)")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

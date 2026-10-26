@@ -114,7 +114,8 @@ def _convex_fans(angles, radii, closed):
 
     m = len(angles)
     if closed:
-        reflex = [k for k in range(m) if not turns_left(points[k - 1], points[k], points[(k + 1) % m])]
+        reflex = [k for k in range(m)
+                  if not turns_left(points[k - 1], points[k], points[(k + 1) % m])]
         if not reflex:
             return [(angles, radii, True)]
         # Open the ring at a reflex corner, which a fan boundary has to pass
@@ -126,7 +127,8 @@ def _convex_fans(angles, radii, closed):
     fans, i = [], 0
     while i < m - 1:
         j = i + 1
-        while j + 1 < m and angles[j + 1] - angles[i] <= 180.0 + 1e-9 and turns_left(points[j - 1], points[j], points[j + 1]):
+        while (j + 1 < m and angles[j + 1] - angles[i] <= 180.0 + 1e-9
+               and turns_left(points[j - 1], points[j], points[j + 1])):
             j += 1
         fans.append((angles[i:j + 1], radii[i:j + 1], False))
         i = j
@@ -233,7 +235,10 @@ def _solve(c, a_ub, b_ub, a_eq, b_eq, bounds):
 
 
 def _place(blocks, n):
-    """Stack per-thruster rows (k x 2 over (fx_i, fy_i)) into rows over (fx_1..fx_n, fy_1..fy_n)."""
+    """Stack per-thruster rows into rows over all thrusters.
+
+    Each block is k x 2 over (fx_i, fy_i); the result is over (fx_1..fx_n, fy_1..fy_n).
+    """
     rows = []
     for i, block in enumerate(blocks):
         full = np.zeros((len(block), 2 * n))
@@ -299,7 +304,8 @@ def _setup(thrusters, n_sides, flushing, power_sources, available):
     zones = dict(zip(on, forbidden_zones([thrusters[i] for i in on], flushing)))
     # An unavailable thruster gives no force, and its flushing sectors on the
     # others are gone.
-    options = [_thruster_pieces(t, n_sides, zones[i]) if i in zones else [_no_force()] for i, t in enumerate(thrusters)]
+    options = [_thruster_pieces(t, n_sides, zones[i]) if i in zones else [_no_force()]
+               for i, t in enumerate(thrusters)]
     sizes = [_size_rows(t, n_sides) for t in thrusters]
     t_ref = max(piece[1].max() for pieces in options for piece in pieces) or 1.0
     power, shares = None, np.zeros((0, n))
@@ -399,7 +405,10 @@ def _min_utilisation(p):
 
 
 def _least_total_thrust(p, utilisation):
-    """Pass 2, variables (f, r, q, t): at that U, the lowest total thrust sum(t_i), with t_i >= |f_i|."""
+    """Pass 2, variables (f, r, q, t): at that U, the lowest total thrust.
+
+    That is sum(t_i), with t_i >= |f_i|.
+    """
     a, c_u, b = _inequalities(p)
     n, n_var = p.n, a.shape[1]
     k = len(p.size_owner)
@@ -444,7 +453,8 @@ def _closest_tau(p, weights):
             np.column_stack([p.a_size, np.zeros((k, n_var - 2 * n + 6)), size_t]),
         ]),
         b_ub=np.r_[b - c_u, np.zeros(k)],
-        a_eq=np.column_stack([p.a_eq, np.zeros((3, n_var - 2 * n)), np.eye(3), -np.eye(3), np.zeros((3, n))]),
+        a_eq=np.column_stack([p.a_eq, np.zeros((3, n_var - 2 * n)), np.eye(3), -np.eye(3),
+                              np.zeros((3, n))]),
         b_eq=p.b_eq,
         bounds=p.f_bounds + [(0, None)] * (n_var - 2 * n + 6 + n),
     )
@@ -455,7 +465,10 @@ def _closest_tau(p, weights):
 
 
 def _thrust_fractions(p, fx, fy):
-    """Each thruster's fraction r of its capacity piece, from the final forces: the largest a . f / limit."""
+    """Each thruster's fraction r of its capacity piece, from the final forces.
+
+    That is the largest a . f / limit.
+    """
     values = p.a_cap @ (np.r_[fx, fy] / p.t_ref)
     use = p.scales & (p.limits > 1e-12)
     r = np.zeros(p.n)
@@ -464,7 +477,10 @@ def _thrust_fractions(p, fx, fy):
 
 
 def _best(thrusters, tau, s):
-    """Pass 1 in every combination of pieces: the problem with the lowest u, and u. (None, inf) if tau can't be given at all."""
+    """Pass 1 in every combination of pieces: the problem with the lowest u, and u.
+
+    (None, inf) if tau can't be given at all.
+    """
     best, best_u = None, np.inf
     for pieces in product(*s.options):
         p = _problem(thrusters, tau, pieces, s)
@@ -477,7 +493,8 @@ def _best(thrusters, tau, s):
 def _allocation(thrusters, p, utilisation, fx, fy, shares):
     """The Allocation for the forces fx, fy found in problem p."""
     r = _thrust_fractions(p, fx, fy)
-    power_kw = np.array([np.nan if t.power_kw is None else thruster_power_kw(t, ri) for t, ri in zip(thrusters, r)])
+    power_kw = np.array([np.nan if t.power_kw is None else thruster_power_kw(t, ri)
+                         for t, ri in zip(thrusters, r)])
     return Allocation(fx, fy, utilisation, r, power_kw, shares @ power_kw)
 
 
@@ -583,7 +600,8 @@ class Command:
     # Direction positive thrust pushes [deg] (layout.py): the azimuth's
     # angle, held while it is idle; 90 for tunnels, 0 for shaft lines.
     azimuth_deg: np.ndarray
-    tau: np.ndarray  # (X, Y, N) the forces give: the command, or the closest reachable when saturated
+    # (X, Y, N) the forces give: the command, or the closest reachable when saturated
+    tau: np.ndarray
     saturated: bool  # True if the command was out of reach
     # The forces, thrust fractions and power. Its utilisation is that of the
     # command: above 1 (inf if out of reach in any amount) when saturated.
@@ -650,7 +668,8 @@ class ThrustAllocator:
             raise ValueError(f"available needs one value per thruster ({n}), got {len(available)}")
         if available not in self._setups:
             self._setups[available] = _setup(
-                thrusters, self.n_sides, self.layout.flushing_sectors, self.layout.power_sources, available)
+                thrusters, self.n_sides, self.layout.flushing_sectors, self.layout.power_sources,
+                available)
         s = self._setups[available]
         weights = np.asarray(self.layout.tau_weights, dtype=float)
         allocation, saturated = _allocate_step(thrusters, tau, s, weights)

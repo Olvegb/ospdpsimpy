@@ -83,7 +83,8 @@ class TestMatLoader(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             p = Path(temp) / "config.toml"
             # Override only the active vessel_fmu block for this tanker smoke test.
-            p.write_text(re.sub(r"^\[vessel_fmu\]\n.*?(?=^\[)", lambda _: "[vessel_fmu]\n" + test_block + "\n\n",
+            p.write_text(re.sub(r"^\[vessel_fmu\]\n.*?(?=^\[)",
+                                lambda _: "[vessel_fmu]\n" + test_block + "\n\n",
                                 shared, count=1, flags=re.MULTILINE | re.DOTALL))
             fm = VesselBlock(instance_name="mat_tanker_smoke")
             fm.config_path = str(p)

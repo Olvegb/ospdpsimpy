@@ -39,7 +39,8 @@ class WF:
         phase = spatial_phase(w, time, eta, self.gravity)
 
         # FORMULA: body_motion = Re{conj(H) @ [amplitude * exp(i * phase)]}.
-        # Motion RAOs already describe first-order wave motion; do not add first-order forces to LF.
+        # Motion RAOs already describe first-order wave motion; do not add first-order
+        # forces to LF.
         body_motion = np.real(np.conj(H) @ (w.amplitude*np.exp(1j*phase)))
 
         # Convert body-frame motion to NED displacement and Euler-angle increments.

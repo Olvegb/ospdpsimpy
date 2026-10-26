@@ -17,9 +17,10 @@ from ospfmusim.waves.helpfunctions.sea_state import directions_to, sea_from_sett
 from ospfmusim.waves.helpfunctions.settings import load_settings
 from ospfmusim.waves.waves import COMPONENT_OUTPUTS, N_WAVES, SLOTS, Waves
 
-CONFIG = default_config()                        # the config the simulation uses (OspSystemStructure.xml)
-WAVES = tomllib.loads(CONFIG.read_text(encoding="utf-8-sig"))["waves"]   # H_s, T_p and direction, as Environment sends them
-DT = 0.1                                                                 # time step [s], as in OspSystemStructure.xml
+CONFIG = default_config()   # the config the simulation uses (OspSystemStructure.xml)
+# H_s, T_p and direction, as Environment sends them
+WAVES = tomllib.loads(CONFIG.read_text(encoding="utf-8-sig"))["waves"]
+DT = 0.1                    # time step [s], as in OspSystemStructure.xml
 
 
 def make_fmu(config_path):
@@ -31,15 +32,23 @@ def make_fmu(config_path):
 
 
 def read_outputs(fmu):
-    """Read the wave component outputs back into four arrays (amplitude, omega, phase, direction_deg)."""
-    return [np.array([getattr(fmu, f"wave{k}_{quantity}") for k in SLOTS]) for quantity in COMPONENT_OUTPUTS]
+    """Read the wave component outputs back into four arrays.
+
+    The arrays are amplitude, omega, phase and direction_deg.
+    """
+    return [np.array([getattr(fmu, f"wave{k}_{quantity}") for k in SLOTS])
+            for quantity in COMPONENT_OUTPUTS]
 
 
 def config_with(**changes):
-    """A copy of the config the simulation uses with some [waves] values changed, in a temporary file."""
+    """A copy of the config the simulation uses with some [waves] values changed.
+
+    The copy is written to a temporary file.
+    """
     text = CONFIG.read_text(encoding="utf-8-sig")
     for key, value in changes.items():
-        text, n = re.subn(rf'^{key} = "[^"]*"', f'{key} = "{value}"', text, count=1, flags=re.MULTILINE)
+        text, n = re.subn(rf'^{key} = "[^"]*"', f'{key} = "{value}"', text, count=1,
+                          flags=re.MULTILINE)
         assert n == 1, f"{key} not found in {CONFIG}"
     file = Path(tempfile.mkdtemp()) / "config.toml"
     file.write_text(text, encoding="utf-8")
@@ -76,8 +85,9 @@ print("CHECK THAT A NEW DIRECTION ONLY TURNS THE WAVES:")
 fmu.wave_direction_deg = WAVES["direction_deg"] + 90.0
 fmu.do_step(t, DT)
 amplitude2, omega2, phase2, direction2 = read_outputs(fmu)
-print(f"  Amplitudes, frequencies and phases unchanged: "
-      f"{np.array_equal(amplitude, amplitude2) and np.array_equal(omega, omega2) and np.array_equal(phase, phase2)}")
+unchanged = (np.array_equal(amplitude, amplitude2) and np.array_equal(omega, omega2)
+             and np.array_equal(phase, phase2))
+print(f"  Amplitudes, frequencies and phases unchanged: {unchanged}")
 print(f"  All directions turned by 90 deg: {np.allclose((direction2 - direction) % 360.0, 90.0)}")
 
 print("CHECK CALM SEA (H_s = 0):")
@@ -92,7 +102,8 @@ fmu.exit_initialization_mode()
 fmu.do_step(0.0, DT)
 amplitude, omega, phase, direction = read_outputs(fmu)
 print(f"  wave1: amplitude = {amplitude[0]:.3f} m (H/2 = {WAVES['hs'] / 2}),  "
-      f"omega = {omega[0]:.4f} rad/s (2 pi/T = {2 * np.pi / WAVES['tp']:.4f}),  phase = {phase[0]:.1f},  "
+      f"omega = {omega[0]:.4f} rad/s (2 pi/T = {2 * np.pi / WAVES['tp']:.4f}),  "
+      f"phase = {phase[0]:.1f},  "
       f"direction = {direction[0]:.1f} deg (to {(WAVES['direction_deg'] + 180) % 360:.1f})")
 print(f"  All other amplitudes zero: {np.all(amplitude[1:] == 0.0)},  "
       f"kept_energy_fraction = {fmu.kept_energy_fraction}")

@@ -25,9 +25,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from dataclasses import dataclass
 import json
-from pathlib import Path
+from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -166,7 +166,6 @@ class WaveLoadResult:
     tau_mean: np.ndarray          # Diagnostic, already included in tau_second_order.
 
 
-
 # --- Viljar: wave_forces/vessel_data.py ---
 DOFS = ("surge", "sway", "yaw")
 
@@ -190,7 +189,8 @@ class VesselData:
 
     def __init__(self, data_file, speed_index, force_rao_rows, drift_rows, rao_amplitude):
         if rao_amplitude not in ("absolute", "signed"):
-            raise ValueError(f"rao_amplitude must be 'absolute' or 'signed', got '{rao_amplitude}'")
+            raise ValueError("rao_amplitude must be 'absolute' or 'signed', "
+                             f"got '{rao_amplitude}'")
         with open(data_file, "r", encoding="utf-8") as f:
             raw = json.load(f)
 
@@ -204,7 +204,8 @@ class VesselData:
         rao_rows = [force_rao_rows[dof] for dof in DOFS]
         drift_row_list = [drift_rows[dof] for dof in DOFS]
         amp = np.asarray(raw["forceRAO"]["amp"], dtype=float)[rao_rows, :, :, speed_index]
-        phase = np.deg2rad(np.asarray(raw["forceRAO"]["phase"], dtype=float))[rao_rows, :, :, speed_index]
+        phase_deg = np.asarray(raw["forceRAO"]["phase"], dtype=float)
+        phase = np.deg2rad(phase_deg)[rao_rows, :, :, speed_index]
         drift = np.asarray(raw["driftfrc"]["amp"], dtype=float)[drift_row_list, :, :, speed_index]
         if rao_amplitude == "absolute":
             amp = np.abs(amp)
@@ -214,7 +215,6 @@ class VesselData:
         self.rao = (amp * np.exp(1j * phase))[:, :, order]     # (3, nf, nh) [N/m, Nm/m]
         self.drift = drift[:, :, order]                        # (3, nf, nh) [N/m^2, Nm/m^2]
 
-
     def tables_at(self, frequencies):
         rao = interpolate_frequency(self.freqs, self.rao, frequencies, left="hold", right="zero")
         # Drift should tend to zero for very long waves (omega -> 0).
@@ -222,7 +222,6 @@ class VesselData:
         d0 = np.concatenate((np.zeros_like(self.drift[:, :1, :]), self.drift), axis=1)
         drift = interpolate_frequency(f0, d0, frequencies, left="hold", right="hold")
         return rao, drift
-
 
     def heading_weights(self, beta):
         h = self.headings
@@ -233,6 +232,7 @@ class VesselData:
         w = (beta - h_ext[lo]) / (h_ext[lo + 1] - h_ext[lo])
         hi = (lo + 1) % nh
         return lo, hi, w
+
 
 # --- Viljar: wave_forces/model.py ---
 class WaveLoadModel:
@@ -247,7 +247,6 @@ class WaveLoadModel:
         self.frequencies = None
         self.set_waves([], [], [], [])  # No waves until set_waves() is called.
 
-
     def set_waves(self, amplitudes, frequencies, phases, directions):
         # INPUT: wave amplitude [m], frequency [rad/s], phase [rad], direction TO [rad].
         frequencies = np.asarray(frequencies, dtype=float)
@@ -259,7 +258,6 @@ class WaveLoadModel:
         self.amplitudes = np.asarray(amplitudes, dtype=float)
         self.phases = np.asarray(phases, dtype=float)
         self.directions = np.asarray(directions, dtype=float)
-
 
     def _interpolate_heading(self, table, beta):
         lo, hi, w = self.vessel.heading_weights(beta)
@@ -415,5 +413,6 @@ class WaveLoads:
             if not np.all(np.isfinite(load)):
                 raise ValueError('Wave calculation produced nonfinite loads')
             outputs.append(load)
-        # OUTPUT: tau_first_order (diagnostic), tau_second_order (sent to LF), tau_mean (diagnostic).
+        # OUTPUT: tau_first_order (diagnostic), tau_second_order (sent to LF),
+        # tau_mean (diagnostic).
         return WaveLoadResult(*outputs)

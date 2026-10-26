@@ -34,7 +34,7 @@
 # =====================================================================
 
 [simulation]
-duration = 10.0                 # how long the simulation runs [s]
+duration = 200.0                # how long the simulation runs [s]
 
 
 # =====================================================================
@@ -55,7 +55,7 @@ air_density = 1.226             # [kg/m^3], DNV-ST-0111 [3.5]
 
 [wind]
 mean_speed = 15.0               # mean wind speed, 1-hour mean [m/s]
-direction_deg = 90.0            # mean direction the wind comes from [deg]
+direction_deg = 0.0             # mean direction the wind comes from [deg]
 reference_height = 10.0         # height the wind speed is given for [m]
 seed = 1                        # random seed; same seed = same wind
 
@@ -89,8 +89,8 @@ std_deg = 5.0                   # standard deviation of the slow random variatio
 #                           or short-crested depending on [waves.spreading].
 
 [waves]
-hs = 3.1                        # significant wave height H_s [m]  (regular: wave height H)
-tp = 8.5                        # peak wave period T_p [s]         (regular: wave period T)
+hs = 5.0                        # significant wave height H_s [m]  (regular: wave height H)
+tp = 9.0                        # peak wave period T_p [s]         (regular: wave period T)
 direction_deg = 45.0            # where the waves come from [deg]
 sea_type = "irregular"          # "regular" or "irregular"
 seed = 123                      # random seed; same seed = same sea

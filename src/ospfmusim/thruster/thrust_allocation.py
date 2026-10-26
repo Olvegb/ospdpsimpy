@@ -37,7 +37,8 @@ TAU_TERMS = tuple(f"tau_{dof}_{term}" for dof in DOFS for term in TERMS)
 class ThrustAllocation(Fmi2Slave):
 
     author = "William"
-    description = "Thrust allocation: thrust and azimuth command per thruster for a commanded force tau"
+    description = ("Thrust allocation: thrust and azimuth command per thruster for a commanded "
+                   "force tau")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

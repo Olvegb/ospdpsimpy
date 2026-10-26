@@ -90,7 +90,8 @@ class Environment(Fmi2Slave):
 
     author = "Olve Grønås Birkeland"
     description = ("Changes the environment during simulation. Mean, slowly varying and gust "
-                   "wind speed, slowly varying wind direction (NED), waves and current, from the config file.")
+                   "wind speed, slowly varying wind direction (NED), waves and current, "
+                   "from the config file.")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -116,7 +117,8 @@ class Environment(Fmi2Slave):
         self.mean_wind_speed = 0.0              # V_mean [m/s]
         self.slowly_varying_wind_speed = 0.0    # V_sv [m/s]
         self.gust_wind_speed = 0.0              # V_gust [m/s]
-        self.wind_direction_deg = 0.0           # where the wind comes from, clockwise from north, 0-360 [deg]
+        # Where the wind comes from, clockwise from north, 0-360 [deg]
+        self.wind_direction_deg = 0.0
         for name in ("mean_wind_speed", "slowly_varying_wind_speed", "gust_wind_speed",
                      "wind_direction_deg"):
             self.register_variable(Real(name, causality=Fmi2Causality.output))
@@ -130,7 +132,8 @@ class Environment(Fmi2Slave):
 
         # OUTPUTS: current, NED frame, passed straight on from the config file.
         self.current_speed = 0.0            # [m/s]
-        self.current_direction_deg = 0.0    # where the current flows TO, clockwise from north [deg]
+        # Where the current flows TO, clockwise from north [deg]
+        self.current_direction_deg = 0.0
         self.current_north = 0.0            # north component of the current velocity [m/s]
         self.current_east = 0.0             # east component of the current velocity [m/s]
         for name in ("current_speed", "current_direction_deg", "current_north", "current_east"):
@@ -189,7 +192,8 @@ class Environment(Fmi2Slave):
                                     for omega, amplitude, phase in self.gust_components), 0.0)
 
         # Wind direction
-        direction = self.mean_wind_direction_deg + self.direction_rate * t + self.direction_sv.step(step_size)
+        direction = (self.mean_wind_direction_deg + self.direction_rate * t
+                     + self.direction_sv.step(step_size))
         self.wind_direction_deg = direction % 360.0
 
         self.H_s = self.hs

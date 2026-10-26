@@ -44,7 +44,8 @@ def settings_from_config(config):
                               ("spectrum_type", "[waves.spectrum] type", SPECTRUM_TYPES),
                               ("spreading_type", "[waves.spreading] type", SPREADING_TYPES)):
         if settings[key] not in valid:
-            raise ValueError(f"{where} = '{settings[key]}' in the config is not valid. Valid: {', '.join(valid)}")
+            raise ValueError(f"{where} = '{settings[key]}' in the config is not valid. "
+                             f"Valid: {', '.join(valid)}")
     return settings
 
 

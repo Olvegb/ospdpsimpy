@@ -1,8 +1,9 @@
 """Check the Environment FMU code WITHOUT building an FMU and without OSP.
 Run from the repo folder:  python src/ospfmusim/enviroment/tests/check_environment.py
 
-Creates the Environment class from enviroment/environment.py with the config the simulation uses,
-or with a copy of it where some values are changed, and checks:
+Creates the Environment class from enviroment/environment.py with the config
+the simulation uses, or with a copy of it where some values are changed, and
+checks:
 
   1. Everything switched off: the outputs are constant and equal to the config.
   2. Slowly varying wind (Gauss-Markov): zero mean, the right std and time
@@ -14,29 +15,33 @@ or with a copy of it where some values are changed, and checks:
   5. Current: north and east components match speed and direction.
   6. Seed: the same seed gives the same wind, another seed another wind.
 """
+import random
 import tempfile
 from math import cos, exp, radians, sin
 from pathlib import Path
-import random
 
 import numpy as np
 
 from app.build.data import default_config
 from ospfmusim.enviroment.environment import Environment, GaussMarkov, norsok_wind_spectrum
 
-CONFIG = default_config()                        # the config the simulation uses (OspSystemStructure.xml)
-DT = 0.1                                         # time step [s], as in OspSystemStructure.xml
+CONFIG = default_config()   # the config the simulation uses (OspSystemStructure.xml)
+DT = 0.1                    # time step [s], as in OspSystemStructure.xml
 TMP = Path(tempfile.mkdtemp())
 
 
 def config_with(changes):
-    """A copy of the config the simulation uses with some values changed: {("section", "key"): "new value"}."""
+    """A copy of the config the simulation uses with some values changed.
+
+    changes: {("section", "key"): "new value"}.
+    """
     lines, section, done = [], None, set()
     for line in CONFIG.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if stripped.startswith("[") and not stripped.startswith("[["):
             section = stripped.strip("[]")
-        key = stripped.split("=")[0].strip() if "=" in stripped and not stripped.startswith("#") else None
+        is_key_line = "=" in stripped and not stripped.startswith("#")
+        key = stripped.split("=")[0].strip() if is_key_line else None
         if (section, key) in changes:
             line = f"{key} = {changes[(section, key)]}"
             done.add((section, key))
@@ -75,12 +80,14 @@ ALL_OFF = {
 
 def check_all_off():
     fmu = environment(ALL_OFF)
-    names = ("mean_wind_speed", "slowly_varying_wind_speed", "gust_wind_speed", "wind_direction_deg")
+    names = ("mean_wind_speed", "slowly_varying_wind_speed", "gust_wind_speed",
+             "wind_direction_deg")
     out = run(fmu, 60.0, names)
     expected = [fmu.mean_wind_speed, 0.0, 0.0, fmu.mean_wind_direction_deg % 360.0]
     print("1. Everything switched off (60 s)")
     print(f"   outputs: {dict(zip(names, [round(float(v), 6) for v in out[-1]]))}")
-    assert np.allclose(out, expected), "the outputs are not constant when every part is switched off"
+    assert np.allclose(out, expected), \
+        "the outputs are not constant when every part is switched off"
 
 
 def gauss_markov_series(time_constant, std, dt, duration, seed):
@@ -99,8 +106,10 @@ def check_slowly_varying():
         print(f"   dt = {dt:3}: mean = {x.mean():6.3f}, std = {x.std():5.3f}, "
               f"correlation after T = {correlation:5.3f} (expected {exp(-1):.3f})")
         assert abs(x.mean()) < 0.2 * std, "the slowly varying wind does not have zero mean"
-        assert abs(x.std() - std) < 0.1 * std, "the std of the slowly varying wind is off by more than 10 %"
-        assert abs(correlation - exp(-1)) < 0.1, "the time constant of the slowly varying wind is wrong"
+        assert abs(x.std() - std) < 0.1 * std, \
+            "the std of the slowly varying wind is off by more than 10 %"
+        assert abs(correlation - exp(-1)) < 0.1, \
+            "the time constant of the slowly varying wind is wrong"
 
 
 def check_gusts():
@@ -114,10 +123,13 @@ def check_gusts():
     std_components = np.sqrt(sum(a ** 2 / 2.0 for _, a, _ in fmu.gust_components))
 
     print("3. Gusts (one hour)")
-    print(f"   std from the spectrum = {std_spectrum:.3f} m/s, from the components = {std_components:.3f} m/s, "
+    print(f"   std from the spectrum = {std_spectrum:.3f} m/s, "
+          f"from the components = {std_components:.3f} m/s, "
           f"of the signal = {gust.std():.3f} m/s, mean = {gust.mean():.3f} m/s")
-    assert abs(std_components - std_spectrum) < 0.1 * std_spectrum, "the gust amplitudes do not match the spectrum"
-    assert abs(gust.std() - std_spectrum) < 0.15 * std_spectrum, "the gust signal does not match the spectrum"
+    assert abs(std_components - std_spectrum) < 0.1 * std_spectrum, \
+        "the gust amplitudes do not match the spectrum"
+    assert abs(gust.std() - std_spectrum) < 0.15 * std_spectrum, \
+        "the gust signal does not match the spectrum"
     assert abs(gust.mean()) < 0.1 * std_spectrum, "the gusts do not have zero mean"
 
 
@@ -131,7 +143,8 @@ def check_direction():
     error = (direction - expected + 180.0) % 360.0 - 180.0
 
     print(f"4. Wind direction, turning rate {rate} deg/s for {duration:.0f} s")
-    print(f"   largest error = {np.abs(error).max():.2e} deg, range = [{direction.min():.2f}, {direction.max():.2f}] deg")
+    print(f"   largest error = {np.abs(error).max():.2e} deg, "
+          f"range = [{direction.min():.2f}, {direction.max():.2f}] deg")
     assert np.abs(error).max() < 1e-9, "the direction does not follow mean + rate * t"
     assert direction.min() >= 0.0 and direction.max() < 360.0, "the direction is outside [0, 360)"
 
@@ -143,12 +156,16 @@ def check_direction():
 def check_current():
     print("5. Current components")
     for speed, towards in ((0.5, 0.0), (0.5, 90.0), (1.0, 225.0), (0.8, 370.0)):
-        fmu = environment({("current", "speed"): str(speed), ("current", "direction_deg"): str(towards)})
+        fmu = environment({("current", "speed"): str(speed),
+                           ("current", "direction_deg"): str(towards)})
         expected = (speed * cos(radians(towards)), speed * sin(radians(towards)))
         print(f"   {speed} m/s towards {towards:5.1f} deg -> north = {fmu.current_north:6.3f}, "
-              f"east = {fmu.current_east:6.3f}, direction out = {fmu.current_direction_deg:5.1f} deg")
-        assert np.allclose((fmu.current_north, fmu.current_east), expected), "wrong current components"
-        assert 0.0 <= fmu.current_direction_deg < 360.0, "the current direction is outside [0, 360)"
+              f"east = {fmu.current_east:6.3f}, "
+              f"direction out = {fmu.current_direction_deg:5.1f} deg")
+        assert np.allclose((fmu.current_north, fmu.current_east), expected), \
+            "wrong current components"
+        assert 0.0 <= fmu.current_direction_deg < 360.0, \
+            "the current direction is outside [0, 360)"
 
 
 def check_seed():
@@ -157,7 +174,8 @@ def check_seed():
     b = run(environment(), 60.0, names)
     c = run(environment({("wind", "seed"): "2"}), 60.0, names)
     print("6. Seed")
-    print(f"   same seed: equal = {np.array_equal(a, b)};  other seed: equal = {np.array_equal(a, c)}")
+    print(f"   same seed: equal = {np.array_equal(a, b)};  "
+          f"other seed: equal = {np.array_equal(a, c)}")
     assert np.array_equal(a, b), "the same seed gives different wind"
     assert not np.array_equal(a, c), "another seed gives the same wind"
 
