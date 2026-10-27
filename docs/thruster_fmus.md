@@ -17,12 +17,15 @@ flowchart LR
 - **ThrusterDynamics** makes each thruster follow its command the way a real one would: thrust builds
   up with a time lag, and azimuths turn at a limited rate. Its outputs are the total force and moment
   the thrusters put on the vessel, and their power.
+- **ThrusterDynamicsKtKq** (`src/ospfmusim/thruster_ktkq/`) is ThrusterDynamics with the thrust and
+  power from KT/KQ propeller curves (§4.1). It replaces ThrusterDynamics as the `dynamics` simulator,
+  to compare the two.
 
 ## 1. What you need to run them
 
 | File | What it is |
 |---|---|
-| `ThrustAllocation.fmu`, `ThrusterDynamics.fmu` | The two FMUs (win64 and linux64 binaries). Not in git: built into `src/ospfmusim/fmus/` by `python -m ospfmusim.build` (and by `python -m ospfmusim.run`) |
+| `ThrustAllocation.fmu`, `ThrusterDynamics.fmu` (or `ThrusterDynamicsKtKq.fmu`) | The two FMUs (win64 and linux64 binaries). Not in git: built into `src/ospfmusim/fmus/` by `python -m ospfmusim.build` (and by `python -m ospfmusim.run`) |
 | `configs/*.toml` | The thruster layout. Both FMUs read it themselves at start-up |
 
 - **Python must be installed.** pythonfmu FMUs do not bundle Python; they use the Python on the
@@ -116,15 +119,9 @@ Every time step of length dt it moves each thruster toward its command:
   `N = Σ (x·fy − y·fx)`.
 - **Power.** `P = P_B · r^1.5`, with P_B = `power_kw` and r = |T| / the thruster's limit in that
   direction.
-- **Propeller curves (optional).** A thruster with `open_water` is a speed-controlled propeller
-  (Sørensen 2018, *Marine Cybernetics*, ch. 8). The lagged thrust above is then the nominal thrust
-  Tn. It sets the shaft speed `n = sign(Tn)·√(|Tn| / (ρD⁴KT0))` (8.38), where KT0 = KT(J = 0). The
-  speed V through the water at the thruster, along its thrust, gives `Ja = (1 − w)·V / (n·D)`
-  (8.6). From that, `Ta = ρD⁴·KT(Ja)·n|n|`, `Qa = ρD⁵·KQ(Ja)·n|n|` and `P = 2π·n·Qa`. V comes from
-  the inputs `u`, `v`, `r`, `yaw` and the current. At rest Ta = Tn. With speed through the water
-  Ta < Tn, a thrust loss the DP controller has to make up for. The allocation still counts on
-  KT0, and its bus limits still use `power_kw · r^1.5`. Not modelled: the shaft and motor
-  dynamics (8.30), reverse curves (8.45), and ventilation and interaction losses (8.6).
+- **No propeller curves.** The thrust is the lagged command, whatever the speed through the water.
+  `open_water` in the config is ignored, and so are the inputs `u`, `v`, `r`, `yaw` and the current.
+  They are there so ThrusterDynamicsKtKq can replace this FMU with the same connections.
 
 The thrusters start at rest: zero thrust, azimuths pointing ahead (0°), tunnels at 90°.
 
@@ -134,18 +131,48 @@ The thrusters start at rest: zero thrust, azimuths pointing ahead (0°), tunnels
 | input | `thrusterK_thrust_command` | Real | N | From ThrustAllocation |
 | input | `thrusterK_azimuth_command_deg` | Real | deg | From ThrustAllocation |
 | input | `thrusterK_available` | Boolean | – | False trips thruster K. Default true |
-| input | `u`, `v`, `r` | Real | m/s, m/s, rad/s | Vessel LF velocity, body frame. Only for `open_water`. Default 0 |
+| input | `u`, `v`, `r` | Real | m/s, m/s, rad/s | Vessel LF velocity, body frame. Only used by ThrusterDynamicsKtKq. Default 0 |
 | input | `yaw` | Real | rad | Vessel heading, to turn the current into the body frame. Default 0 |
 | input | `current_north`, `current_east` | Real | m/s | Current velocity, NED. Default 0 |
 | output | `thrusterK_thrust` | Real | N | Actual thrust, same sign convention as the command |
 | output | `thrusterK_azimuth_deg` | Real | deg | Actual direction, in [0°, 360°) |
-| output | `thrusterK_power_kw` | Real | kW | Power of thruster K: `2π·n·Qa` with `open_water`, else from `power_kw` (0 without either) |
-| output | `thrusterK_shaft_speed` | Real | rps | Shaft speed n, signed like the thrust (0 without `open_water`) |
-| output | `thrusterK_torque` | Real | Nm | Propeller torque Qa (0 without `open_water`) |
+| output | `thrusterK_power_kw` | Real | kW | Power of thruster K from `power_kw` (0 without it) |
 | output | `X` | Real | N | Total thruster force on the vessel, surge |
 | output | `Y` | Real | N | Total thruster force on the vessel, sway |
 | output | `N` | Real | Nm | Total thruster yaw moment on the vessel |
 | output | `total_power_kw` | Real | kW | Sum of the thrusters' power |
+
+### 4.1 ThrusterDynamicsKtKq FMU
+
+The same FMU, with the thrust and power from open-water propeller curves for every thruster with
+`open_water` in the config (Sørensen 2018, *Marine Cybernetics*, ch. 8). Thrusters without
+`open_water` behave as in ThrusterDynamics. The code is in `src/ospfmusim/thruster_ktkq/`:
+`helpfunctions/dynamics_ktkq.py` subclasses `thruster/helpfunctions/dynamics.py`, so the lag, rate
+limits and trips are shared and only the thrust and power differ.
+
+- The lagged thrust is the nominal thrust Tn. It sets the shaft speed
+  `n = sign(Tn)·√(|Tn| / (ρD⁴KT0))` (8.38), where KT0 = KT(J = 0).
+- The speed V through the water at the thruster, along its thrust, gives `Ja = (1 − w)·V / (n·D)`
+  (8.6). V comes from the inputs `u`, `v`, `r`, `yaw` and the current.
+- `Ta = ρD⁴·KT(Ja)·n|n|`, `Qa = ρD⁵·KQ(Ja)·n|n|` and `P = 2π·n·Qa`. At rest Ta = Tn. With speed
+  through the water Ta < Tn, a thrust loss the DP controller has to make up for.
+- The allocation still counts on KT0, and its bus limits still use `power_kw · r^1.5`, so set
+  `power_kw` to match KQ0 when the bus limits matter.
+- Not modelled: the shaft and motor dynamics (8.30), reverse curves (8.45), and ventilation and
+  interaction losses (8.6).
+
+It has every variable of ThrusterDynamics, and two more outputs per slot:
+
+| | Name | Type | Unit | Meaning |
+|---|---|---|---|---|
+| output | `thrusterK_power_kw` | Real | kW | `2π·n·Qa` with `open_water`, else as in ThrusterDynamics |
+| output | `thrusterK_shaft_speed` | Real | rps | Shaft speed n, signed like the thrust (0 without `open_water`) |
+| output | `thrusterK_torque` | Real | Nm | Propeller torque Qa (0 without `open_water`) |
+
+**To compare the two**, run the same config once with each. In `OspSystemStructure.xml`, change the
+`dynamics` simulator's `source="fmus/ThrusterDynamics.fmu"` to `source="fmus/ThrusterDynamicsKtKq.fmu"`
+(and back); every connection stays the same. `python -m ospfmusim.run --name ktkq` builds it, and the
+app shows both runs.
 
 ## 5. Connecting them in `OspSystemStructure.xml`
 
@@ -199,8 +226,7 @@ even if the layout has fewer thrusters; empty slots carry 0.
 <!-- the same for Y and N -->
 ```
 
-**Vessel and environment → dynamics** (six connections, only used by thrusters with
-`open_water`): `vessel.lf_u`, `lf_v`, `lf_r` and `yaw` to `dynamics.u`, `v`, `r` and `yaw`,
+**Vessel and environment → dynamics** (six connections, only used by ThrusterDynamicsKtKq): `vessel.lf_u`, `lf_v`, `lf_r` and `yaw` to `dynamics.u`, `v`, `r` and `yaw`,
 and `environment.current_north` and `current_east` to the dynamics inputs with the same names.
 
 **Failures (optional).** If nothing is connected, every thruster is available. To trip thruster K,
@@ -258,7 +284,7 @@ max_azimuth_rate = 10.0       # [deg/s]
 | `power_supply` | with `[[power_sources]]` | `[[source name, share], …]`, shares summing to 1 |
 | `thrust_time_constant` | no | Thrust lag [s]. Without it the thrust follows the command at once |
 | `max_azimuth_rate` | no | [deg/s]. Without it the azimuth turns at once |
-| `open_water` | no | Open-water curves `[[J, KT, KQ], …]`, J increasing and covering 0, interpolated linearly (end values held outside). Two rows give the linear model (8.10). Needs `diameter`. Without it there is no propeller model (§4) |
+| `open_water` | no | Open-water curves `[[J, KT, KQ], …]`, J increasing and covering 0, interpolated linearly (end values held outside). Two rows give the linear model (8.10). Needs `diameter`. Only used by ThrusterDynamicsKtKq (§4.1) |
 | `wake_fraction` | no | w in `Va = (1 − w)·V` (8.12). Default 0 |
 
 The thruster layout in `configs/tests.toml` is a made-up ~80 m PSV: two azimuths aft (AZ1 port, AZ2 starboard,

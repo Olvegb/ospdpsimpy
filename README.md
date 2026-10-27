@@ -139,6 +139,7 @@ Every FMU gets the same copy of the model folders of `src/ospfmusim` in its `res
 | `src/ospfmusim/observer/ekf/ekf.py` | ExtendedKalmanFilter FMU, everything in one file | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/controller/dp_controller.py` | DPController FMU, everything in one file | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/thruster/thrust_allocation.py`, `src/ospfmusim/thruster/thruster_dynamics.py` | ThrustAllocation and ThrusterDynamics FMUs. Thin wrappers around `thruster/helpfunctions/` | When the logic changes. Rebuilt by itself. |
+| `src/ospfmusim/thruster_ktkq/` | ThrusterDynamicsKtKq FMU: ThrusterDynamics with the thrust from KT/KQ propeller curves, to swap in and compare. See [docs/thruster_fmus.md](docs/thruster_fmus.md) §4.1 | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/*/helpfunctions/` | The wave, vessel and thruster logic. Built into every FMU's `resources/` | When the logic changes. Rebuilt by itself. |
 | `tests/` | The pytest tests: one `test_*.py` per part (environment, waves, vessel, Kalman filter, controller, thrusters). Most run the FMU classes directly in Python, without OSP; `test_vessel_fmu.py` runs the built VesselBlock FMU | When that logic changes |
 | `src/ospfmusim/build.py` | `build_fmus()`: builds the FMUs the system structure uses into `src/ospfmusim/fmus/`, only those that have changed | When an FMU is added |

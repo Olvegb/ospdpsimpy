@@ -5,8 +5,9 @@
 2. ThrustAllocator + ThrusterDynamics, a Gunnerus-like layout without thrust
    lag, starting at rest with an astern command: the force the dynamics give
    must be the one the allocator says it commands, every step.
-3. Open-water curves: an azimuth at bollard pull gives the commanded thrust,
-   and loses thrust when it moves through the water.
+3. Open-water curves (ThrusterDynamicsKtKq): an azimuth at bollard pull
+   gives the commanded thrust, and loses thrust when it moves through the
+   water. The two FMUs take the same inputs; only the KT/KQ one loses thrust.
 
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland (2026)
@@ -14,9 +15,12 @@ Authors: William Boland (2026)
 import numpy as np
 import pytest
 
+from ospfmusim.thruster import thruster_dynamics
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
-from ospfmusim.thruster.helpfunctions.dynamics import RHO, ThrusterDynamics
+from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
 from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
+from ospfmusim.thruster_ktkq import thruster_dynamics_ktkq
+from ospfmusim.thruster_ktkq.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
 
 RATE = 10.0      # [deg/s]
 THRUST = 100e3   # [N]
@@ -101,7 +105,8 @@ D = 2.0
 
 
 def propeller_azimuth():
-    return azimuth(diameter=D, open_water=OPEN_WATER)
+    return ThrusterDynamicsKtKq(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=D,
+                                                 open_water=OPEN_WATER),)))
 
 
 def test_bollard_pull_gives_the_commanded_thrust():
@@ -114,8 +119,40 @@ def test_bollard_pull_gives_the_commanded_thrust():
 
 
 def test_speed_through_the_water_loses_thrust():
-    state = propeller_azimuth().step([THRUST], [0.0], velocity=(2.0, 0.0, 0.0))
+    model = propeller_azimuth()
+    model.velocity = (2.0, 0.0, 0.0)
+    state = model.step([THRUST], [0.0])
     n = state.shaft_speed[0]
     ja = 2.0 / (n * D)                                             # (8.6)
     assert state.thrust[0] < THRUST
     assert state.thrust[0] == pytest.approx(RHO * D**4 * (0.36 - 0.32 * ja) * n**2)
+
+
+def test_only_the_ktkq_fmu_loses_thrust_with_speed(tmp_path):
+    """The same config and inputs in both FMUs, as when one replaces the other."""
+    config = tmp_path / "config.toml"
+    config.write_text(f"""
+[[thrusters]]
+name = "AZ"
+kind = "azimuth"
+x = 0.0
+y = 0.0
+max_thrust = 200e3
+diameter = {D}
+open_water = {[list(row) for row in OPEN_WATER]}
+""")
+    fmus = {}
+    for cls in (thruster_dynamics.ThrusterDynamics, thruster_dynamics_ktkq.ThrusterDynamicsKtKq):
+        fmu = fmus[cls] = cls(instance_name="dynamics")
+        fmu.config_path = str(config)
+        fmu.thruster1_thrust_command = THRUST
+        fmu.u = 2.0
+        fmu.exit_initialization_mode()
+    model = propeller_azimuth()
+    model.velocity = (2.0, 0.0, 0.0)
+    expected = model.step([THRUST], [0.0])
+    old, ktkq = fmus.values()
+    assert old.thruster1_thrust == pytest.approx(THRUST)
+    assert ktkq.thruster1_thrust == pytest.approx(expected.thrust[0])
+    assert ktkq.thruster1_shaft_speed == pytest.approx(expected.shaft_speed[0])
+    assert ktkq.X == pytest.approx(expected.thrust[0])

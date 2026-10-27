@@ -293,16 +293,25 @@ x = -16.95                       # [m]
 y = 2.7                        # [m]
 #z = 2.33 # From freesurface 
 max_thrust = 50000.0           # [N]
-diameter = 2.0                  # [m]
+diameter = 1.9                  # [m], PMAZM propeller (OSP demo-cases, SINTEF SimVal)
 power_kw = 500.0               # power at max_thrust [kW]
 power_supply = [["SWBD 1", 1.0]]
 thrust_time_constant = 5.0      # first-order lag of the thrust [s]
 max_azimuth_rate = 10.0         # fastest it turns [deg/s]
-# Open-water curves [[J, KT, KQ], ...], interpolated linearly. PLACEHOLDER:
-# the linear model KT = 0.36 - 0.32 J, KQ = 0.046 - 0.028 J (Sørensen 2018,
-# (8.10); KT0 from Example 8.4.1, slopes read roughly off Fig. 8.5, P/D = 0.89).
-# Replace with real open-water data: add rows.
-open_water = [[-0.5, 0.52, 0.060], [1.0, 0.04, 0.018]]
+# Open-water curves [[J, KT, KQ], ...], interpolated linearly. Only used by the
+# ThrusterDynamicsKtKq FMU; ThrusterDynamics ignores them. Gunnerus PMAZM
+# ducted azimuth at 0 deg azimuth (Rolls-Royce model, labelled P/D 1.4), from
+# PMAzimuth.fmu in the OSP demo-cases (MIT), sampled every 0.1 in J from the
+# polynomials in data_examples/Gunnerus_PMAZM_KT_KQ.xlsx. KT is propeller +
+# duct. Checked against the 25 Oct 2023 sea trial power only for J = 0.7-0.85,
+# not near J = 0. J < 0 holds the J = 0 values.
+open_water = [
+    [0.0, 0.820, 0.0873], [0.1, 0.756, 0.0870], [0.2, 0.692, 0.0864],
+    [0.3, 0.629, 0.0854], [0.4, 0.568, 0.0840], [0.5, 0.509, 0.0821],
+    [0.6, 0.452, 0.0797], [0.7, 0.396, 0.0768], [0.8, 0.343, 0.0731],
+    [0.9, 0.290, 0.0688], [1.0, 0.238, 0.0637], [1.1, 0.184, 0.0577],
+    [1.2, 0.128, 0.0508],
+]
 
 [[thrusters]]
 name = "AZ2"                 # starboard azimuth
@@ -311,12 +320,18 @@ x = -16.95
 y = -2.7
 #z = 
 max_thrust = 50000.0
-diameter = 2.0
+diameter = 1.9
 power_kw = 500.0
 power_supply = [["SWBD 2", 1.0]]
 thrust_time_constant = 5.0
 max_azimuth_rate = 10.0
-open_water = [[-0.5, 0.52, 0.060], [1.0, 0.04, 0.018]]   # PLACEHOLDER, see AZ1
+open_water = [                  # Gunnerus PMAZM, see AZ1
+    [0.0, 0.820, 0.0873], [0.1, 0.756, 0.0870], [0.2, 0.692, 0.0864],
+    [0.3, 0.629, 0.0854], [0.4, 0.568, 0.0840], [0.5, 0.509, 0.0821],
+    [0.6, 0.452, 0.0797], [0.7, 0.396, 0.0768], [0.8, 0.343, 0.0731],
+    [0.9, 0.290, 0.0688], [1.0, 0.238, 0.0637], [1.1, 0.184, 0.0577],
+    [1.2, 0.128, 0.0508],
+]
 
 [[thrusters]]
 name = "BT1"                    # bow tunnel; positive thrust pushes to starboard
