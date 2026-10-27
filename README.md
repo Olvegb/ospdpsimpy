@@ -234,10 +234,7 @@ In every FMU the variables fall into four kinds. Examples from `src/ospfmusim/en
 
 The code follows [PEP 8](https://peps.python.org/pep-0008/), with lines up to 99 characters (PEP 8 allows this). Two exceptions on purpose: matrices and vectors keep the symbols from the literature (`M`, `D`, `R`, `P`, `K`, ...), and the module names in `hull/helpfunctions/` (`LF.py`, `WaveLoads.py`, ...) are kept. To check:
 
-```powershell
-pip install pycodestyle
-pycodestyle --max-line-length=99 src scripts tests
-```
+
 
 ## License
 
