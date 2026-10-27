@@ -296,7 +296,8 @@ power_kw = 500.0               # power at max_thrust [kW]
 power_supply = [["SWBD 1", 1.0]]
 thrust_time_constant = 5.0      # first-order lag of the thrust [s]
 max_azimuth_rate = 10.0         # fastest it turns [deg/s]
-# Open-water curves [[J, KT, KQ], ...], interpolated linearly. PLACEHOLDER:
+# Open-water curves [[J, KT, KQ], ...], interpolated linearly. Only used by the
+# ThrusterDynamicsKtKq FMU; ThrusterDynamics ignores them. PLACEHOLDER:
 # the linear model KT = 0.36 - 0.32 J, KQ = 0.046 - 0.028 J (Sørensen 2018,
 # (8.10); KT0 from Example 8.4.1, slopes read roughly off Fig. 8.5, P/D = 0.89).
 # Replace with real open-water data: add rows.

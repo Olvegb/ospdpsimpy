@@ -89,6 +89,8 @@
             </InitialValues>
         </Simulator>
 
+        <!-- ThrusterDynamics: thrust = lagged command. For the thrust from the KT/KQ propeller
+             curves (open_water in the config), use source="fmus/ThrusterDynamicsKtKq.fmu". -->
         <Simulator name="dynamics" source="fmus/ThrusterDynamics.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
@@ -1756,7 +1758,8 @@
             <Variable simulator="vessel" name="N_thrusters"/>
         </VariableConnection>
 
-        <!-- vessel, environment -> dynamics: speed through the water for the propeller curves -->
+        <!-- vessel, environment -> dynamics: speed through the water for the propeller curves
+             (only ThrusterDynamicsKtKq uses it) -->
         <VariableConnection>
             <Variable simulator="vessel" name="lf_u"/>
             <Variable simulator="dynamics" name="u"/>

@@ -55,7 +55,8 @@ class Thruster:
     # Dynamics (dynamics.py). None: the thruster follows its command at once.
     thrust_time_constant: float | None = None  # first-order lag of the thrust [s]
     max_azimuth_rate: float | None = None  # fastest an azimuth turns [deg/s]
-    # Open-water propeller curves (dynamics.py): (J, KT, KQ) rows, J
+    # Open-water propeller curves, only used by the ThrusterDynamicsKtKq FMU
+    # (thruster_ktkq/helpfunctions/dynamics_ktkq.py): (J, KT, KQ) rows, J
     # increasing and covering J = 0, interpolated linearly. Two rows give the
     # linear model KT = KT0 - alpha_T1*J of Sørensen (2018) (8.10). Needs
     # diameter. Empty: thrust follows the command, power P_B * r^1.5.
