@@ -1,0 +1,5 @@
+# Machine-generated plots and numerical output stay local by default.
+*.png
+*.pdf
+*.csv
+*.json

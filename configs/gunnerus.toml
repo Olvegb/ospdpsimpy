@@ -182,10 +182,12 @@ damping_matrix = [
 
 # Gunnerus .mat hydrodynamics; shared wind/thruster geometry still needs calibration.
 [vessel_fmu]
-mat_file = "../data_examples/GunnerusL35_20201112.mat"
+mat_file = "../data_examples/gunnerus.mat"
 
 # Frequency count, heading step and spacing default to Wamit.py settings.
-lf_reference_omega_rad_s = 0.2094395
+# No LF reference value is required: Wamit.py now selects the lowest
+# calculated source frequency when using the MATLAB Bv matrix.
+# To override the automatic selection, add lf_reference_omega_rad_s = <value>.
 use_mat_viscous_damping = true
 
 # Select Newman or Sorensen at the top of hull/helpfunctions/WaveLoads.py.

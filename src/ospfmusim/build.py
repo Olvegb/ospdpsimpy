@@ -45,7 +45,7 @@ FMUS = {
 }
 
 # Folders that are not copied into the FMUs.
-SKIPPED_FOLDERS = {"fmus", "__pycache__"}
+SKIPPED_FOLDERS = {"fmus", "__pycache__", "plots"}
 
 
 def model_files():
