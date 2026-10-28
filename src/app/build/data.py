@@ -29,6 +29,26 @@ SYSTEM = ROOT / "src" / "ospfmusim" / "OspSystemStructure.xml"
 CSV_NAME = re.compile(r"^(?P<simulator>.+)_\d{8}_\d{6}_\d+\.csv$")
 WAVE_COLUMN = re.compile(r"^wave\d+_")
 
+# Unit of a result column, from its name: the first pattern that matches wins.
+# The FMUs do not write units. Angles without _deg are in rad.
+UNITS = [(re.compile(pattern), unit) for pattern, unit in [
+    (r"_deg$", "deg"),
+    (r"_kw$", "kW"),
+    (r"^wave\d+_amplitude$|^H_s$", "m"),
+    (r"^wave\d+_omega$", "rad/s"),
+    (r"^wave\d+_phase$", "rad"),
+    (r"^T_p$|_s$", "s"),                                    # max_internal_step_s
+    (r"^current_|wind_speed$", "m/s"),                      # before north/east
+    (r"(north|east|down)(_hat|_meas)?$", "m"),
+    (r"(roll|pitch|yaw|psi)(_hat|_meas)?$", "rad"),
+    (r"(^|_)[uvw](_hat)?$", "m/s"),
+    (r"(^|_)[pqr](_hat)?$", "rad/s"),
+    (r"_thrust(_command)?$", "N"),
+    (r"(^|_)[KMN](_thrusters|_[PID])?$|_n(_hat)?$", "Nm"),  # tau_N_P, b_n_hat, tau_thr_n
+    (r"(^|_)[XYZ](_thrusters|_[PID])?$|_[xy](_hat)?$", "N"),
+    (r"utilisation|fraction|available|saturated|turn_limited", "-"),
+]]
+
 
 def result_files(folder):
     """{simulator: newest CSV file} in a results folder."""
@@ -47,6 +67,17 @@ def load_results(folder):
         df = pd.read_csv(path, index_col="Time")
         results[simulator] = df.drop(columns=["StepCount", "config_path"], errors="ignore")
     return results
+
+
+def unit(name):
+    """The unit of a result column ('north' or 'vessel.north'), or "" if the name is not known."""
+    column = name.rsplit(".", 1)[-1]
+    return next((unit for pattern, unit in UNITS if pattern.search(column)), "")
+
+
+def label(name):
+    """'vessel.north' -> 'vessel.north [m]'. Without brackets if the unit is not known."""
+    return f"{name} [{unit(name)}]" if unit(name) else name
 
 
 def folder_stamp(folder):
