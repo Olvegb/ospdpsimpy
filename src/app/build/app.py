@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
@@ -35,15 +36,14 @@ def cached_results(folder, stamp):           # stamp is only there to refresh th
 
 
 @st.cache_data(show_spinner="Making the footprint animation ...")
-def footprint_html(folder, stamp, start, stop, set_point, n_arrows, n_frames, with_environment,
-                   dark):
+def footprint_html(folder, stamp, set_point, n_arrows, n_frames, with_environment, dark):
     """The animated footprint as HTML, cached. stamp is only there to refresh the cache.
 
     Shown with st.iframe instead of st.plotly_chart, because st.plotly_chart
     validates every animation frame on every rerun of the app, which takes seconds.
     plotly.js is loaded from its CDN, so this plot needs an internet connection.
     """
-    results = {name: df.loc[start:stop] for name, df in data.load_results(folder).items()}
+    results = data.load_results(folder)
     environment = results.get("environment") if with_environment else None
     figure = footprint.animated_footprint(results["vessel"], set_point, n_arrows, n_frames,
                                           environment)
@@ -78,7 +78,7 @@ def deg(s):
 
 
 # ---------------------------------------------------------------------
-#  Sidebar: which run to show, time window
+#  Sidebar: which run to show
 # ---------------------------------------------------------------------
 
 st.sidebar.title("⚓ Gunnerus DP")
@@ -108,10 +108,6 @@ elif folder is not None:
 config_path = data.run_config_path(folder) if folder is not None else None
 config = data.load_config(config_path or data.default_config())
 if results:
-    end_time = float(max(df.index[-1] for df in results.values() if len(df)))
-    start, stop = st.sidebar.slider("Time window [s]", 0.0, end_time, (0.0, end_time),
-                                    step=max(end_time / 1000, 0.1))
-    results = {name: df.loc[start:stop] for name, df in results.items()}
     st.sidebar.caption("Files: " + ", ".join(sorted(results)))
     st.sidebar.caption("Config: the run's own copy." if config_path else
                        f"Config: configs/{data.default_config().name} now (this run has no copy), "
@@ -209,8 +205,8 @@ with tabs[1]:
             ctrl = config.get("controller", {})
             set_point = (ctrl.get("north_ref", 0.0), ctrl.get("east_ref", 0.0))
             dark = getattr(st.context.theme, "type", None) == "dark"
-            html = footprint_html(str(folder), data.folder_stamp(folder), start, stop, set_point,
-                                  n_arrows, n_frames, show_environment, dark)
+            html = footprint_html(str(folder), data.folder_stamp(folder), set_point, n_arrows,
+                                  n_frames, show_environment, dark)
             st.iframe(html, height=640)              # our own HTML, made just above
 
 # --- Vessel ----------------------------------------------------------
@@ -369,13 +365,22 @@ with tabs[5]:
 # --- Data ------------------------------------------------------------
 with tabs[6]:
     st.header("Data")
-    simulator = st.selectbox("FMU", sorted(results))
-    df = results[simulator]
     show_waves = st.checkbox("Show the wave component columns (wave1_ ... wave100_)", value=False)
-    columns = [c for c in df.columns if show_waves or not data.WAVE_COLUMN.match(c)]
-    chosen = st.multiselect("Columns to plot", columns, default=columns[:1])
-    if chosen:
-        show(line_plot([(c, df[c]) for c in chosen], simulator, "", height=420))
-    st.dataframe(df[columns], width="stretch", height=300)
-    st.download_button("Download as CSV", df.to_csv().encode("utf-8"),
-                       file_name=f"{simulator}.csv", mime="text/csv")
+    # One list over all FMUs, so the chosen signals are kept (a separate FMU picker would change
+    # the options, and Streamlit then clears what is chosen).
+    options = [f"{simulator}.{c}" for simulator in sorted(results) for c in results[simulator]
+               if show_waves or not data.WAVE_COLUMN.match(c)]
+    chosen = st.multiselect("Signals to plot", options, default=options[:1],
+                            format_func=data.label, help="Type to search, e.g. thrust.")
+    if not chosen:
+        st.info("Choose one or more signals to plot.")
+    else:
+        # Signals from different FMUs on one time axis (NaN where an FMU has no value).
+        table = pd.DataFrame({name: results[name.split(".")[0]][name.split(".", 1)[1]]
+                              for name in chosen}).rename(columns=data.label)
+        units = {data.unit(name) for name in chosen}
+        y_label = f"[{units.pop()}]" if len(units) == 1 and "" not in units else ""
+        show(line_plot(table.items(), "", y_label, height=420))
+        st.dataframe(table, width="stretch", height=300)
+        st.download_button("Download as CSV", table.to_csv().encode("utf-8"),
+                           file_name="signals.csv", mime="text/csv")

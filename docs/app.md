@@ -57,7 +57,7 @@ in the config file in `configs/`.
 | **Environment** | Wind speed (total and each part), wind, wave and current directions, current components, sea state |
 | **Kalman filter** | Measured total, LF estimate and true LF motion; WF estimate and true WF motion; the bias estimate |
 | **Control and thrusters** | Position and heading error, commanded vs delivered force, thrust, azimuth and power per thruster (named from `[[thrusters]]`), utilisation, saturation and turn limit |
-| **Data** | Any column of any FMU: plot, table and download as CSV |
+| **Data** | Any signals from any FMUs, with units, in one plot; table and download as CSV of the chosen signals. The units come from the column names (`UNITS` in `data.py`), since the FMUs do not write them |
 
 **Sidebar**
 
@@ -65,7 +65,6 @@ in the config file in `configs/`.
   run folders, or from cosim CLI) show up as "results/ (loose files)".
 - **Other folder.** Show a run that lies somewhere else.
 - **Reload.** Reads the files again (also happens by itself when a CSV file changes).
-- **Time window.** Zooms every plot to a part of the run.
 
 **The animated footprint.** The time slider and ▶ Play run in the browser, so moving through the run
 is quick. *Number of heading arrows* sets how many earlier headings are drawn, *Time steps on the
