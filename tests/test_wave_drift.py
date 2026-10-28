@@ -47,10 +47,10 @@ class DriftChecks(unittest.TestCase):
                 selected_drift_method()
 
     def test_sorensen_control_refuses_signed_gunnerus(self):
-        from ospfmusim.hull.helpfunctions.Wamit import load_gunnerus
+        from ospfmusim.hull.helpfunctions.Wamit import load_vessel
         with patch("ospfmusim.hull.helpfunctions.WaveLoads.DRIFT_METHOD", "sorensen"):
             with self.assertRaisesRegex(ValueError, "Signed drift"):
-                load_gunnerus()
+                load_vessel()
 
     def test_filtered_double_sum(self):
         diagonal = np.array([[4, 9, 16], [1, 9, 25], [0, 9, 16.]])

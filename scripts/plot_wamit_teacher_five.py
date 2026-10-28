@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Use only gunnerus.mat. Produce 0..180 deg WAMIT results every 10 degrees.
+"""Use only GunnerusL35_20201112.mat. Produce 0..180 deg WAMIT results every 10 degrees.
 
 Exactly five PDF deliverables named after teacher's requested hydrodynamic
 categories. The original Gunnerus 100-frequency .mat is the *only* data source.
@@ -18,7 +18,7 @@ from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'data_examples' / 'gunnerus.mat'
+SOURCE = ROOT / 'data_examples' / 'GunnerusL35_20201112.mat'
 DEFAULT_OUTPUT = ROOT / 'src' / 'ospfmusim' / 'hull' / 'plots' / 'wamit_interpolation'
 v=loadmat(SOURCE,simplify_cells=True)['vessel']
 w=np.asarray(v['motionRAO']['w'],dtype=float).ravel()
@@ -222,7 +222,7 @@ def main():
         'second_order_scope':'WAMIT .8 mean wave drift only, not full QTF'
     }
     (out/'plot_validation.json').write_text(json.dumps(info,indent=2)+'\n')
-    print('DONE - 5 required plot PDFs from gunnerus.mat only')
+    print('DONE - 5 required plot PDFs from GunnerusL35_20201112.mat only')
     for path in paths:
         print(' ',path.name,'size',path.stat().st_size,'bytes')
     print('Real WAMIT angular frequencies:',f'{w[0]:.9f}',f'{w[-1]:.9f}','rad/s')

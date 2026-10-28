@@ -74,13 +74,17 @@ class ThrustAllocation(Fmi2Slave):
             setattr(self, f"tau_{dof}", 0.0)
             self.register_variable(Real(f"tau_{dof}", causality=Fmi2Causality.output))
         # utilisation: what the command needs as a fraction of what the
-        # thrusters have; above 1 (inf if out of reach in any amount) when
-        # saturated, and the commands are then the closest they can give.
+        # thrusters have, with the azimuths free to point anywhere; above 1
+        # (inf if out of reach in any amount) when saturated. turn_limited:
+        # within reach, but not this step because an azimuth is still turning.
+        # In both cases the commands are the closest they can give.
         self.utilisation = 0.0
         self.saturated = False
+        self.turn_limited = False
         self.register_variable(Real("utilisation", causality=Fmi2Causality.output))
-        self.register_variable(Boolean("saturated", causality=Fmi2Causality.output,
-                                       variability=Fmi2Variability.discrete))
+        for name in ("saturated", "turn_limited"):
+            self.register_variable(Boolean(name, causality=Fmi2Causality.output,
+                                           variability=Fmi2Variability.discrete))
 
         self.allocator = None  # made in exit_initialization_mode
 
@@ -113,3 +117,4 @@ class ThrustAllocation(Fmi2Slave):
             setattr(self, f"thruster{k}_azimuth_command_deg", float(angle))
         self.utilisation = float(command.allocation.utilisation)
         self.saturated = bool(command.saturated)
+        self.turn_limited = bool(command.turn_limited)

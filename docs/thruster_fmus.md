@@ -81,8 +81,9 @@ Every time step it:
    `max_azimuth_rate · dt` (dt = the FMU step size), the shortest way round, as ThrusterDynamics does.
    While one can't get there in this step, every azimuth is held at its new angle (thrust along it
    only, 0 to `max_thrust`) and steps 2–3 run again. The other thrusters then make up what they can,
-   and `saturated` shows when they can't. Every command can be followed by ThrusterDynamics, so with
-   no thrust lag the delivered force is the allocated one.
+   and `turn_limited` shows when they can't. `saturated` and `utilisation` still come from steps 2–3
+   with the azimuths free, so they show only the thrust and power demand. Every command can be
+   followed by ThrusterDynamics, so with no thrust lag the delivered force is the allocated one.
 
 | | Name | Type | Unit | Meaning |
 |---|---|---|---|---|
@@ -94,8 +95,9 @@ Every time step it:
 | output | `thrusterK_thrust_command` | Real | N | Thrust along `thrusterK_azimuth_command_deg`: ≥ 0 for azimuths, signed for tunnels and shaft lines |
 | output | `thrusterK_azimuth_command_deg` | Real | deg | Direction positive thrust pushes: the commanded angle for azimuths, always 90 for tunnels and 0 for shaft lines |
 | output | `tau_X`, `tau_Y`, `tau_N` | Real | N, N, Nm | τ = P + I + D, the commanded force that is allocated |
-| output | `utilisation` | Real | – | What τ needs as a fraction of what the thrusters have. Above 1 when saturated; `inf` when τ can't be given in any amount (e.g. tunnels only against a surge command) |
-| output | `saturated` | Boolean | – | True when τ was out of reach and the commands give the closest reachable τ. Out of reach includes azimuths that haven't turned far enough yet |
+| output | `utilisation` | Real | – | What τ needs as a fraction of what the thrusters have, with the azimuths free to point anywhere. Above 1 when saturated; `inf` when τ can't be given in any amount (e.g. tunnels only against a surge command) |
+| output | `saturated` | Boolean | – | True when τ is more than the thrusters can give (thrust or power), even with the azimuths pointing the best way. The commands give the closest reachable τ |
+| output | `turn_limited` | Boolean | – | True when τ is within reach, but not this step because an azimuth hasn't turned far enough yet. The commands give the closest reachable τ. Never true together with `saturated` |
 
 K = 1 … 8 (§6). With these definitions every kind of thruster pushes with
 `f = thrust · (cos α, sin α)`. A tunnel with a negative thrust pushes to port, a shaft line with a
@@ -295,12 +297,13 @@ constants (5 s azimuths, 3 s tunnels) and turn rates (10 °/s) are typical but m
 
 - **Turning azimuths.** The allocation doesn't read the actual angles back; it keeps its own and
   turns them as fast as ThrusterDynamics does. Both FMUs must therefore run with the same step size
-  and read the same `max_azimuth_rate`. During a turn `saturated` can be true even though the
+  and read the same `max_azimuth_rate`. During a turn `turn_limited` can be true even though the
   thrusters are lightly loaded: the command is out of reach where the azimuths point now. The
   target angle comes from an allocation without rate limits and can jump when τ changes direction;
   the azimuths then turn toward the new one.
 - **Commanded vs delivered.** The plots compare P + I + D with the delivered force. They differ
-  by the thrust lag, and while `saturated` is true also by what the thrusters can't give.
+  by the thrust lag, and while `saturated` or `turn_limited` is true also by what the thrusters
+  can't give.
 - **Saturation.** When τ is out of reach, `saturated` is true and `utilisation` is above 1, or `inf`
   if τ can't be given in any amount. The commands then give the closest reachable τ. With equal
   `tau_weights`, the heading (N) is held first and Y or X gives way.
@@ -308,7 +311,8 @@ constants (5 s azimuths, 3 s tunnels) and turn rates (10 °/s) are typical but m
 - **Step size.** Tested with fixed steps of 0.1 s. One allocation step takes about 6 ms on the
   4-thruster layout (10 ms when saturated). More thrusters with forbidden zones mean more linear
   programs per step. The dynamics are exact for any step size.
-- **CSV output.** libcosim writes the Booleans (`saturated`, `thrusterK_available`) as 1/0.
+- **CSV output.** libcosim writes the Booleans (`saturated`, `turn_limited`, `thrusterK_available`)
+  as 1/0.
 
 ## 8. Check that it runs
 
@@ -322,7 +326,7 @@ step should give:
 | BT1 | 73.8 @ 90.0 | 73.8 @ 90.0 | 360.3 |
 | BT2 | 68.9 @ 90.0 | 68.9 @ 90.0 | 360.3 |
 
-`utilisation` = 0.543, `saturated` = false, and (X, Y, N) ≈ (0, 300.0 kN, 26 Nm), total power
+`utilisation` = 0.543, `saturated` and `turn_limited` = false, and (X, Y, N) ≈ (0, 300.0 kN, 26 Nm), total power
 2314.7 kW. The azimuths push against each other in surge: their opposite surge forces cancel the
 yaw moment from pushing sideways at x = −40 m.
 

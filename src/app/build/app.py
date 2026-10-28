@@ -360,8 +360,10 @@ with tabs[5]:
             show(line_plot([(name, dynamics[f"thruster{k}_power_kw"]) for k, name in slots]
                            + [("Total", dynamics["total_power_kw"])], "Power", "[kW]"))
         if allocation is not None:
-            show(line_plot([("Utilisation", allocation["utilisation"]),
-                            ("Saturated", allocation["saturated"].astype(float))],
+            flags = [(name, allocation[col].astype(float))
+                     for name, col in [("Saturated", "saturated"), ("Turn-limited", "turn_limited")]
+                     if col in allocation]
+            show(line_plot([("Utilisation", allocation["utilisation"])] + flags,
                            "Allocation", "[-]", height=260))
 
 # --- Data ------------------------------------------------------------

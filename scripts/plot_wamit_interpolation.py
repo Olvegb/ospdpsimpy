@@ -1,7 +1,8 @@
 """Compare 50/150 interpolated MSS/WAMIT values to original 100 points.
 
 From the ospdpsimpy repository root:
-    python3 scripts/plot_wamit_interpolation.py
+    python3 scripts/plot_wamit_interpolation.py            # Wamit.MAT_FILE (Gunnerus)
+    python3 scripts/plot_wamit_interpolation.py other.mat  # another vessel
 
 Uses production hull.helpfunctions.Wamit.load_mat_vessel; does not run any FMUs.
 License: MIT (see the repository root LICENSE).
@@ -19,11 +20,11 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from ospfmusim.hull.helpfunctions.Wamit import load_mat_vessel
+from ospfmusim.hull.helpfunctions.Wamit import MAT_FILE, load_mat_vessel
 from ospfmusim.hull.helpfunctions.WaveLoads import selected_drift_method
 
 # -------------- Visual-test settings --------------
-SOURCE_MAT = ROOT / "data_examples" / "gunnerus.mat"
+SOURCE_MAT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else MAT_FILE
 COUNTS = (50, 150)
 HEADINGS = tuple(range(0, 181, 10))
 OUTPUT = ROOT / "src" / "ospfmusim" / "hull" / "plots" / "wamit_interpolation"

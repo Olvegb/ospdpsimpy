@@ -75,7 +75,7 @@ Kalman filter estimates at the end of the simulation:
   north_hat =        2.929 m
   ...
 
-Thrusters at the end of the simulation (utilisation 0.509, saturated False):
+Thrusters at the end of the simulation (utilisation 0.509, saturated False, turn-limited False):
   X              =      38251.0 N
   Y              =      14047.5 N
   N              =    2601440.0 Nm

@@ -52,11 +52,11 @@ in the config file in `configs/`.
 
 | Tab | Content |
 |---|---|
-| **Overview** | Key numbers (position and heading error, power, utilisation, time saturated, mean wind), the footprint (north vs east, total and LF, with the set-point), a summary of the run's config, and an animated footprint: a time slider (and ▶ Play) moves through the run and shows the track so far, earlier headings, the vessel's position and heading now, and arrows for wind, waves and current with their values at that time (see below) |
+| **Overview** | Key numbers (position and heading error, power, utilisation, time saturated, time turn-limited, mean wind), the footprint (north vs east, total and LF, with the set-point), a summary of the run's config, and an animated footprint: a time slider (and ▶ Play) moves through the run and shows the track so far, earlier headings, the vessel's position and heading now, and arrows for wind, waves and current with their values at that time (see below) |
 | **Vessel** | North, east and heading (total and LF), the WF motion, the LF velocity, and the loads per DOF: wind, wave drift and thrusters |
 | **Environment** | Wind speed (total and each part), wind, wave and current directions, current components, sea state |
 | **Kalman filter** | Measured total, LF estimate and true LF motion; WF estimate and true WF motion; the bias estimate |
-| **Control and thrusters** | Position and heading error, commanded vs delivered force, thrust, azimuth and power per thruster (named from `[[thrusters]]`), utilisation and saturation |
+| **Control and thrusters** | Position and heading error, commanded vs delivered force, thrust, azimuth and power per thruster (named from `[[thrusters]]`), utilisation, saturation and turn limit |
 | **Data** | Any column of any FMU: plot, table and download as CSV |
 
 **Sidebar**

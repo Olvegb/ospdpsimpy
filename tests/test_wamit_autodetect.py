@@ -1,6 +1,6 @@
 """Regression tests for automatic MSS frequency and Bv dimension detection.
 
-Tests are local if the untracked data_examples/gunnerus.mat is available.
+Tests are local if the untracked data_examples/GunnerusL35_20201112.mat is available.
 No external WAMIT or MATLAB process is needed to run them.
 
 License: MIT (see LICENSE in the repository root)
@@ -17,7 +17,7 @@ from ospfmusim.hull.helpfunctions.Wamit import (
     load_mat_vessel,
 )
 
-MAT = Path(__file__).resolve().parents[1] / "data_examples" / "gunnerus.mat"
+MAT = Path(__file__).resolve().parents[1] / "data_examples" / "GunnerusL35_20201112.mat"
 
 
 @unittest.skipUnless(MAT.is_file(), "Optional Gunnerus .mat is not included in Git")

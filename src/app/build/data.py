@@ -153,6 +153,8 @@ def summary(results, config):
     if allocation is not None and len(allocation):
         out["Utilisation, max"] = (allocation["utilisation"].max(), "")
         out["Time saturated"] = (100.0 * allocation["saturated"].astype(bool).mean(), "%")
+        if "turn_limited" in allocation:  # not in runs from before it was added
+            out["Time turn-limited"] = (100.0 * allocation["turn_limited"].astype(bool).mean(), "%")
     environment = results.get("environment")
     if environment is not None and len(environment):
         out["Wind speed, mean"] = (total_wind_speed(environment).mean(), "m/s")
