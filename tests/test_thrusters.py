@@ -82,9 +82,11 @@ def test_angle_commands_respect_the_rate_limit(allocated):
     assert max(turns) <= RATE * DT + 1e-9
 
 
-def test_saturated_at_the_start(allocated):
+def test_turn_limited_not_saturated_at_the_start(allocated):
     _, commands, _, _ = allocated
-    assert commands[0].saturated         # the azimuths can't push astern yet
+    assert commands[0].turn_limited      # the azimuths can't push astern yet
+    assert not commands[0].saturated     # but they are strong enough
+    assert commands[0].allocation.utilisation < 1
 
 
 def test_dynamics_give_the_commanded_force_every_step(allocated):
@@ -95,7 +97,7 @@ def test_dynamics_give_the_commanded_force_every_step(allocated):
 
 def test_tau_reached_and_delivered_after_25_s(allocated):
     tau, commands, states, _ = allocated
-    assert not commands[-1].saturated
+    assert not commands[-1].saturated and not commands[-1].turn_limited
     np.testing.assert_allclose(states[-1].tau, tau, atol=1.0)
 
 

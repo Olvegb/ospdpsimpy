@@ -164,7 +164,8 @@ def print_summary(run_dir):
     allocation, dynamics = last("allocation"), last("dynamics")
     print("\nThrusters at the end of the simulation "
           f"(utilisation {allocation['utilisation']:.3f}, "
-          f"saturated {bool(allocation['saturated'])}):")
+          f"saturated {bool(allocation['saturated'])}, "
+          f"turn-limited {bool(allocation['turn_limited'])}):")
     for name, unit in [("X", "N"), ("Y", "N"), ("N", "Nm"), ("total_power_kw", "kW")]:
         print(f"  {name:14} = {dynamics[name]:12.1f} {unit}")
 

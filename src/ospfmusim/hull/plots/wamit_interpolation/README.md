@@ -10,7 +10,7 @@ category:
 5. 05_Second_Order_Wave_Load_Coefficients.pdf - mean wave-drift loads only.
 
 All horizontal axes show **wave period T in seconds**. The results use the
-100 calculated frequencies in data_examples/gunnerus.mat, and all original
+100 calculated frequencies in data_examples/GunnerusL35_20201112.mat, and all original
 19 headings 0, 10, ..., 180 degrees. No interpolation has been performed
 in these plots; synthetic matrix-only zero/infinite limiting entries are not
 plotted as original WAMIT calculations.

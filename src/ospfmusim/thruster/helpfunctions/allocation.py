@@ -604,13 +604,18 @@ class Command:
     # Direction positive thrust pushes [deg] (layout.py): the azimuth's
     # angle, held while it is idle; 90 for tunnels, 0 for shaft lines.
     azimuth_deg: np.ndarray
-    # (X, Y, N) the forces give: the command, or the closest reachable when saturated
+    # (X, Y, N) the forces give: the command, or the closest reachable when
+    # saturated or turn_limited
     tau: np.ndarray
-    saturated: bool  # True if the command was out of reach
-    # The forces, thrust fractions and power. Its utilisation is that of the
-    # command: above 1 (inf if out of reach in any amount) when saturated.
-    # While azimuths are held by their turn rate, both count them where they
-    # can point this step.
+    # True if the command is more than the thrusters can give (thrust or
+    # power), even with the azimuths pointing the best way.
+    saturated: bool
+    # True if the command is within reach, but not this step: an azimuth is
+    # still turning (max_azimuth_rate). Never true together with saturated.
+    turn_limited: bool
+    # The forces, thrust fractions and power, with the azimuths where they can
+    # point this step. Its utilisation is what the command needs with the
+    # azimuths free: above 1 (inf if out of reach in any amount) when saturated.
     allocation: Allocation
 
 
@@ -632,8 +637,9 @@ class ThrustAllocator:
     - With dt, azimuths turn at most max_azimuth_rate * dt per step toward
       the angle the allocation gives without rate limits. While one can't get
       there this step, every azimuth is held at its new angle (thrust along
-      it only) and the thrust is allocated again. ThrusterDynamics turns
-      them the same way, so it can follow every command.
+      it only) and the thrust is allocated again; turn_limited is set if
+      that falls short of tau. ThrusterDynamics turns them the same way, so
+      it can follow every command.
 
     The convex pieces of each set of available thrusters are worked out once
     and kept.
@@ -677,6 +683,7 @@ class ThrustAllocator:
         s = self._setups[available]
         weights = np.asarray(self.layout.tau_weights, dtype=float)
         allocation, saturated = _allocate_step(thrusters, tau, s, weights)
+        turn_limited = False
 
         kinds = [t.kind for t in thrusters]
         azimuth = np.array([k == "azimuth" for k in kinds])
@@ -694,8 +701,11 @@ class ThrustAllocator:
                 options = [[_held_at(t, a, s.zones[i])] if azimuth[i] and available[i]
                            else s.options[i]
                            for i, (t, a) in enumerate(zip(thrusters, angle))]
-                allocation, saturated = _allocate_step(thrusters, tau,
-                                                       replace(s, options=options), weights)
+                held, short = _allocate_step(thrusters, tau, replace(s, options=options), weights)
+                # Short only because of the turn is turn_limited, not saturated. The
+                # utilisation stays that of the free azimuths, the thrust and power demand.
+                turn_limited = short and not saturated
+                allocation = replace(held, utilisation=allocation.utilisation)
         self._angle = angle
 
         fx, fy = allocation.fx, allocation.fy
@@ -704,4 +714,4 @@ class ThrustAllocator:
         thrust = np.where([k == "tunnel" for k in kinds], fy,
                           np.where([k == "shaft_line" for k in kinds], fx, np.hypot(fx, fy)))
         achieved = np.array([fx.sum(), fy.sum(), (x * fy - y * fx).sum()])
-        return Command(thrust, self._angle.copy(), achieved, saturated, allocation)
+        return Command(thrust, self._angle.copy(), achieved, saturated, turn_limited, allocation)

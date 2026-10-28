@@ -32,7 +32,7 @@ def test_wamit_to_vessel_lf_wf_connection():
     )
     source = (CONFIG.parent / settings["mat_file"]).resolve()
     assert source.is_file(), f"MATLAB file missing: {source}"
-    assert source.name == "gunnerus.mat"
+    assert source.name == "GunnerusL35_20201112.mat"
 
     raw = loadmat(source, simplify_cells=True)["vessel"]
     source_omega = np.asarray(raw["motionRAO"]["w"], dtype=float).ravel()

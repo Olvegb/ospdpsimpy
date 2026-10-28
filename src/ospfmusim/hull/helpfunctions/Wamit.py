@@ -8,6 +8,7 @@ files are produced by this script.
 License: GPL-3.0-or-later (see LICENSE and NOTICE.md in this folder)
 Authors: Araz, Olve Grønås Birkeland (2026)
 """
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -21,13 +22,14 @@ except ImportError:  # VS Code: Run Python File
     from WaveLoads import ResponseTable, selected_drift_method
 
 
-# --------------- ONLY USER SETTING -------------------
+# --------------- ONLY USER SETTINGS ------------------
 FREQUENCY_COUNT = 100  # None = use all original calculated source frequencies
+# .mat inspected when this file is run (or: python Wamit.py other.mat);
+# the simulation uses [vessel_fmu] mat_file in the config.
+MAT_FILE = Path(__file__).resolve().parents[4] / "data_examples" / "GunnerusL35_20201112.mat"
 # -----------------------------------------------------
 
 # Internal MSS loader defaults; normally no manual input is needed.
-# The simulation's active MATLAB file is selected by configs/gunnerus.toml.
-GUNNERUS_FILE = Path(__file__).resolve().parents[4] / "data_examples" / "gunnerus.mat"
 HEADING_STEP_DEG = 10
 FREQUENCY_SPACING = "log"  # Used only when the chosen count differs from source
 LF_REFERENCE_OMEGA = None  # Select lowest calculated frequency automatically
@@ -88,7 +90,7 @@ def _mat_viscous_at(raw_bv, frequencies, omega):
 
 
 def load_mat_vessel(
-    filename=GUNNERUS_FILE, *, frequency_count=FREQUENCY_COUNT,
+    filename=MAT_FILE, *, frequency_count=FREQUENCY_COUNT,
     heading_step_deg=HEADING_STEP_DEG, frequency_spacing=FREQUENCY_SPACING,
     lf_reference_omega_rad_s=None, additional_linear_damping_matrix_si=None,
     drift_method=None, require_simulation_ready=False,
@@ -270,10 +272,10 @@ def load_mat_vessel(
     return result
 
 
-def load_gunnerus():
-    """Load the configured MATLAB vessel and auto-select its lowest REAL LF omega."""
+def load_vessel(filename=MAT_FILE):
+    """Load a MATLAB vessel and auto-select its lowest REAL LF omega."""
     return load_mat_vessel(
-        GUNNERUS_FILE, lf_reference_omega_rad_s=LF_REFERENCE_OMEGA,
+        filename, lf_reference_omega_rad_s=LF_REFERENCE_OMEGA,
         use_mat_viscous_damping=True,
         drift_method=selected_drift_method(), require_simulation_ready=True,
     )
@@ -281,7 +283,7 @@ def load_gunnerus():
 
 def main():
     """Run this file in VS Code: show exactly what was read and what is used."""
-    data = load_gunnerus()
+    data = load_vessel(sys.argv[1] if len(sys.argv) > 1 else MAT_FILE)
     i = data["frequency_info"]
     fmt = lambda w: f"{w:.9f} rad/s (T={2*np.pi/w:.5f} s)" if w > 0 else "0 rad/s (T=infinity)"
 

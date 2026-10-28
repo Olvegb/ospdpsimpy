@@ -182,7 +182,7 @@ damping_matrix = [
 
 # Gunnerus .mat hydrodynamics; shared wind/thruster geometry still needs calibration.
 [vessel_fmu]
-mat_file = "../data_examples/gunnerus.mat"
+mat_file = "../data_examples/GunnerusL35_20201112.mat"
 
 # Frequency count, heading step and spacing default to Wamit.py settings.
 # No LF reference value is required: Wamit.py now selects the lowest
@@ -290,7 +290,7 @@ reserve_fraction = 0.1
 name = "AZ1"                    # port azimuth
 kind = "azimuth"                # "azimuth", "tunnel" or "shaft_line"
 x = -16.95                       # [m]
-y = 2.7                        # [m]
+y = -2.7                        # [m]
 #z = 2.33 # From freesurface 
 max_thrust = 50000.0           # [N]
 diameter = 1.9                  # [m], PMAZM propeller (OSP demo-cases, SINTEF SimVal)
@@ -317,8 +317,8 @@ open_water = [
 name = "AZ2"                 # starboard azimuth
 kind = "azimuth"
 x = -16.95
-y = -2.7
-#z = 
+y = 2.7
+#z = 2.33
 max_thrust = 50000.0
 diameter = 1.9
 power_kw = 500.0

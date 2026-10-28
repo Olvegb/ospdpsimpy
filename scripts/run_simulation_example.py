@@ -14,12 +14,12 @@ Authors: Olve Grønås Birkeland (2026)
 from pathlib import Path
 
 from app.build.data import load_results
-from ospfmusim.run import print_summary, run_simulation
+from ospfmusim.run import configured_mat_file, print_summary, run_simulation
 
 ROOT = Path(__file__).resolve().parents[1]       # the repo folder
 
-MAT_FILE = ROOT / "data_examples" / "GunnerusL35_20201112.mat"
 CONFIG_FILE = ROOT / "configs" / "gunnerus.toml"
+MAT_FILE = configured_mat_file(CONFIG_FILE)      # [vessel_fmu] mat_file in the config
 SYSTEM_STRUCTURE = ROOT / "src" / "ospfmusim" / "OspSystemStructure.xml"
 DURATION = 100.0                                # simulated time [s], instead of the config's
 
