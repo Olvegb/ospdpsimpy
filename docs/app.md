@@ -57,6 +57,7 @@ in the config file in `configs/`.
 | **Environment** | Wind speed (total and each part), wind, wave and current directions, current components, sea state |
 | **Kalman filter** | Measured total, LF estimate and true LF motion; WF estimate and true WF motion; the bias estimate |
 | **Control and thrusters** | Position and heading error, commanded vs delivered force, thrust, azimuth and power per thruster (named from `[[thrusters]]`), utilisation, saturation and turn limit |
+| **Thrusters** | The vessel seen from above (bow up, starboard right). At each thruster a pointed arrow for its thrust on the vessel (the way it pushes, length = thrust), a ring at its `max_thrust`, a dotted outline for the command from the allocation, and red wedges for the directions it may not push in (its `forbidden_zones`, and the DNV-ST-0111 flushing sectors with `[allocation] flushing_sectors = true`, drawn with every thruster working). From the middle the sum of the thrusters (X, Y), delivered and commanded by the controller; all arrows have the same scale. A box gives thrust, angle and power per thruster, the sum with N, the load on each switchboard, and the saturated / turn-limited flags. Beside it thrust, angle (-180 to 180°), power and, with `[[power_sources]]`, the switchboard load in % of usable power (available minus reserve) over time, with a line at the slider time. The load comes from the power the thrusters report; the allocation keeps its own estimate (P_B·r^1.5) under the limit, so with ThrusterDynamicsKtKq the two can differ. A time slider (and ▶ Play) moves through the run. The hull outline is drawn from `[vessel] loa` with the Gunnerus beam/length ratio. Needs an internet connection, like the animated footprint |
 | **Data** | Any signals from any FMUs, with units, in one plot; table and download as CSV of the chosen signals. The units come from the column names (`UNITS` in `data.py`), since the FMUs do not write them |
 
 **Sidebar**
@@ -82,6 +83,7 @@ Angles are shown in degrees, also where the FMU uses radians (vessel `yaw`, filt
 |---|---|
 | `src/app/build/app.py` | The Streamlit app: sidebar and tabs |
 | `src/app/build/footprint.py` | The animated footprint in the Overview tab |
+| `src/app/build/thruster_view.py` | The animated thruster view in the Thrusters tab |
 | `src/app/build/editor.py` | The New run tab: the inputs, running the simulation, saving as default |
 | `src/app/build/data.py` | Reads the run folders, the result CSVs and the config, key numbers. Plain Python and pandas, no Streamlit |
 | `src/app/build/config_tools.py` | Changes values in the config as text, so the comments are kept. Also used by `src/ospfmusim/run.py` |

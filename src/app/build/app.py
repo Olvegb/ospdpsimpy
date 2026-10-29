@@ -17,10 +17,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
+from ospfmusim.thruster.helpfunctions.layout import load_layout
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import data  # noqa: E402
 import footprint  # noqa: E402
+import thruster_view  # noqa: E402
 import editor  # noqa: E402
 
 st.set_page_config(page_title="Gunnerus DP results", page_icon="⚓", layout="wide")
@@ -35,23 +37,39 @@ def cached_results(folder, stamp):           # stamp is only there to refresh th
     return data.load_results(folder)
 
 
-@st.cache_data(show_spinner="Making the footprint animation ...")
-def footprint_html(folder, stamp, set_point, n_arrows, n_frames, with_environment, dark):
-    """The animated footprint as HTML, cached. stamp is only there to refresh the cache.
+def figure_html(figure, dark):
+    """An animated Plotly figure dict as HTML, in the light or dark theme.
 
     Shown with st.iframe instead of st.plotly_chart, because st.plotly_chart
     validates every animation frame on every rerun of the app, which takes seconds.
-    plotly.js is loaded from its CDN, so this plot needs an internet connection.
+    plotly.js is loaded from its CDN, so these plots need an internet connection.
     """
-    results = data.load_results(folder)
-    environment = results.get("environment") if with_environment else None
-    figure = footprint.animated_footprint(results["vessel"], set_point, n_arrows, n_frames,
-                                          environment)
     template = pio.templates["plotly_dark" if dark else "plotly_white"]
     figure["layout"]["template"] = template.to_plotly_json()
     figure["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
     return pio.to_html(figure, include_plotlyjs="cdn", full_html=False, auto_play=False,
                        validate=False, config={"displaylogo": False})
+
+
+@st.cache_data(show_spinner="Making the footprint animation ...")
+def footprint_html(folder, stamp, set_point, n_arrows, n_frames, with_environment, dark):
+    """The animated footprint as HTML, cached. stamp is only there to refresh the cache."""
+    results = data.load_results(folder)
+    environment = results.get("environment") if with_environment else None
+    return figure_html(footprint.animated_footprint(results["vessel"], set_point, n_arrows,
+                                                    n_frames, environment), dark)
+
+
+@st.cache_data(show_spinner="Making the thruster animation ...")
+def thrusters_html(folder, stamp, config_file, loa, n_frames, dark):
+    """The animated thruster view as HTML, cached. stamp is only there to refresh the cache.
+
+    The thrusters, zones and switchboards come from the layout in config_file.
+    """
+    results = data.load_results(folder)
+    return figure_html(thruster_view.animated_thrusters(results["dynamics"],
+                                                        load_layout(config_file), loa, n_frames,
+                                                        results.get("allocation")), dark)
 
 
 def line_plot(series, title, y_label, height=320):
@@ -121,7 +139,7 @@ R = results.get                                 # short name: R("vessel") -> Dat
 # ---------------------------------------------------------------------
 
 tabs = st.tabs(["New run", "Overview", "Vessel", "Environment", "Kalman filter",
-               "Control and thrusters", "Data"])
+               "Control and thrusters", "Thrusters", "Data"])
 
 with tabs[0]:
     editor.render()
@@ -362,8 +380,42 @@ with tabs[5]:
             show(line_plot([("Utilisation", allocation["utilisation"])] + flags,
                            "Allocation", "[-]", height=260))
 
-# --- Data ------------------------------------------------------------
+# --- Thrusters --------------------------------------------------------
 with tabs[6]:
+    st.header("Thrusters")
+    dynamics, thrusters = R("dynamics"), config.get("thrusters", [])
+    if dynamics is None or not thrusters:
+        missing("dynamics")
+    else:
+        n_frames = st.slider("Time steps on the slider", 20, 400, 150, step=10,
+                             key="thruster_frames",
+                             help="More steps = smoother, but a slower page.")
+        st.caption("The vessel seen from above, bow up and starboard to the right. Each arrow is "
+                   "the thrust on the vessel: it points the way the thruster pushes, and its "
+                   "length is the thrust. The ring around a thruster is its max_thrust, so an "
+                   "arrow at the ring is full thrust. Red wedges are directions the thruster "
+                   "may not push in (forbidden_zones, and the DNV-ST-0111 flushing sectors with "
+                   "flushing_sectors = true). Dotted outlines are what the allocation "
+                   "asked for. The orange arrow from the middle is the sum of the thrusters "
+                   "(X, Y; dotted: commanded by the controller); all arrows have the same scale. "
+                   "The box gives thrust, angle (0° forward, 90° to starboard, -90° to port) "
+                   "and power, the sum with the yaw moment N, the load on each switchboard, and "
+                   "the allocation flags. The plots on the right show the whole run, with a line "
+                   "at the slider time; the bottom one is the switchboard load in % of what each "
+                   "[[power_sources]] can give (available minus reserve). Move "
+                   "the time slider under the plot, or press ▶ Play. Click a name in the legend "
+                   "to hide it.")
+        loa = config.get("vessel", {}).get("loa") or 2.2 * max(abs(t["x"]) for t in thrusters)
+        dark = getattr(st.context.theme, "type", None) == "dark"
+        try:
+            html = thrusters_html(str(folder), data.folder_stamp(folder),
+                                  str(config_path or data.default_config()), loa, n_frames, dark)
+            st.iframe(html, height=800)              # our own HTML, made just above
+        except ValueError as error:                  # a config the thruster layout rejects
+            st.error(f"Could not read the thrusters from the config: {error}")
+
+# --- Data ------------------------------------------------------------
+with tabs[7]:
     st.header("Data")
     show_waves = st.checkbox("Show the wave component columns (wave1_ ... wave100_)", value=False)
     # One list over all FMUs, so the chosen signals are kept (a separate FMU picker would change
