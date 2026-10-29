@@ -297,7 +297,7 @@ diameter = 1.9                  # [m], PMAZM propeller (OSP demo-cases, SINTEF S
 power_kw = 500.0               # power at max_thrust [kW]
 power_supply = [["SWBD 1", 1.0]]
 thrust_time_constant = 5.0      # first-order lag of the thrust [s]
-max_azimuth_rate = 10.0         # fastest it turns [deg/s]
+max_azimuth_rate = 12.0         # fastest it turns [deg/s]
 # Open-water curves [[J, KT, KQ], ...], interpolated linearly. Only used by the
 # ThrusterDynamicsKtKq FMU; ThrusterDynamics ignores them. Gunnerus PMAZM
 # ducted azimuth at 0 deg azimuth (Rolls-Royce model, labelled P/D 1.4), from
@@ -324,7 +324,7 @@ diameter = 1.9
 power_kw = 500.0
 power_supply = [["SWBD 2", 1.0]]
 thrust_time_constant = 5.0
-max_azimuth_rate = 10.0
+max_azimuth_rate = 12.0
 open_water = [                  # Gunnerus PMAZM, see AZ1
     [0.0, 0.820, 0.0873], [0.1, 0.756, 0.0870], [0.2, 0.692, 0.0864],
     [0.3, 0.629, 0.0854], [0.4, 0.568, 0.0840], [0.5, 0.509, 0.0821],
