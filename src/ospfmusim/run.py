@@ -20,8 +20,9 @@ the duration in that config ([simulation] duration).
 
 run_simulation() first builds the FMUs the system uses, but only those whose
 model code has changed (see build.py). Every run gets its own folder,
-results/<YYYYMMDD_HHMMSS>[_name]/ in the repo folder, with one CSV per FMU and
-a copy of the config (config.toml) and the system structure it was run with.
+results/<YYYYMMDD_HHMMSS>[_name]/ in the repo folder, with one CSV per FMU, a
+copy of the config (config.toml) and the system structure it was run with, and
+real_time.csv: the wall-clock time [s] at every simulated time step.
 Nothing from earlier runs is overwritten.
 
 License: MIT (see LICENSE in the repository root)
@@ -30,6 +31,7 @@ Authors: William Boland, Olve Grønås Birkeland (2026)
 import argparse
 import re
 import shutil
+import time
 import tomllib
 from datetime import datetime
 from pathlib import Path
@@ -113,10 +115,19 @@ def run_simulation(mat_file, config_file, system_structure=SYSTEM_STRUCTURE, dur
     observer = CosimObserver.create_to_dir(log_dir=str(run_dir))
     execution.add_observer(observer=observer)
 
-    # 5. Run. The FMUs read the config here (in exit_initialization_mode).
+    # 5. Run, one step at a time, noting the wall-clock time after every step.
+    #    The FMUs read the config in the first step (in exit_initialization_mode).
     #    libcosim measures time in nanoseconds.
+    target = int(duration * 1e9)
+    real_time = [(0.0, 0.0)]
+    start = time.perf_counter()
     try:
-        finished = execution.simulate_until(target_time=int(duration * 1e9))
+        finished = True
+        while finished and execution.status().current_time < target:
+            finished = execution.step()
+            real_time.append((execution.status().current_time / 1e9, time.perf_counter() - start))
+        pd.DataFrame(real_time, columns=["Time", "real_time"]).to_csv(
+            run_dir / "real_time.csv", index=False)
     finally:
         # Close the simulation, also when it failed, so libcosim finishes
         # writing the CSV files. A simulation that is still open when Python
@@ -141,8 +152,11 @@ def print_summary(run_dir):
     environment, vessel = last("environment"), last("vessel")
     wind_speed = (environment["mean_wind_speed"] + environment["slowly_varying_wind_speed"]
                   + environment["gust_wind_speed"])
+    real_time = pd.read_csv(run_dir / "real_time.csv").iloc[-1]
     print(f"Vessel:  {config['vessel']['type']}, "
           f"simulated for {config['simulation']['duration']} s")
+    print(f"Took:    {real_time['real_time']:.1f} s real time "
+          f"({real_time['Time'] / real_time['real_time']:.1f} x real time)")
     print(f"Wind:    {wind_speed:.1f} m/s from {environment['wind_direction_deg']:.1f} deg "
           "(NED, at the end)")
     print(f"Current: {environment['current_speed']} m/s towards "

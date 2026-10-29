@@ -286,6 +286,7 @@ max_azimuth_rate = 10.0       # [deg/s]
 | `power_supply` | with `[[power_sources]]` | `[[source name, share], …]`, shares summing to 1 |
 | `thrust_time_constant` | no | Thrust lag [s]. Without it the thrust follows the command at once |
 | `max_azimuth_rate` | no | [deg/s]. Without it the azimuth turns at once |
+| `max_azimuth_rpm` | no | The same in [rpm] (1 rpm = 6 deg/s). Give this or `max_azimuth_rate` |
 | `open_water` | no | Open-water curves `[[J, KT, KQ], …]`, J increasing and covering 0, interpolated linearly (end values held outside). Two rows give the linear model (8.10). Needs `diameter`. Only used by ThrusterDynamicsKtKq (§4.1) |
 | `wake_fraction` | no | w in `Va = (1 − w)·V` (8.12). Default 0 |
 

@@ -54,7 +54,8 @@ class Thruster:
     power_supply: tuple[tuple[str, float], ...] = ()
     # Dynamics (dynamics.py). None: the thruster follows its command at once.
     thrust_time_constant: float | None = None  # first-order lag of the thrust [s]
-    max_azimuth_rate: float | None = None  # fastest an azimuth turns [deg/s]
+    # Fastest an azimuth turns [deg/s]. In the config also as max_azimuth_rpm [rpm].
+    max_azimuth_rate: float | None = None
     # Open-water propeller curves, only used by the ThrusterDynamicsKtKq FMU
     # (thruster_ktkq/helpfunctions/dynamics_ktkq.py): (J, KT, KQ) rows, J
     # increasing and covering J = 0, interpolated linearly. Two rows give the
@@ -152,6 +153,16 @@ def _build(cls, data, where):
         raise ValueError(f"{where}: {error}") from None
 
 
+def _thruster(data, where):
+    """Thruster from a [[thrusters]] entry, with max_azimuth_rpm turned into max_azimuth_rate."""
+    if "max_azimuth_rpm" in data:
+        if "max_azimuth_rate" in data:
+            raise ValueError(f"{where}: give max_azimuth_rpm or max_azimuth_rate, not both")
+        data = dict(data)
+        data["max_azimuth_rate"] = 6.0 * data.pop("max_azimuth_rpm")  # 1 rpm = 360 deg/min
+    return _build(Thruster, data, where)
+
+
 def load_layout(path):
     """
     Read a thruster layout from the TOML config file (config.toml):
@@ -171,7 +182,8 @@ def load_layout(path):
         ...
 
     The keys of each thruster and power source are the fields of Thruster
-    and PowerSource; the keys of [allocation] are the other fields of
+    and PowerSource, plus max_azimuth_rpm [rpm] in place of max_azimuth_rate
+    [deg/s]; the keys of [allocation] are the other fields of
     Layout. [allocation] and [[power_sources]] are optional. Other sections
     belong to other readers of the file and are ignored.
 
@@ -183,7 +195,7 @@ def load_layout(path):
     data = tomllib.loads(Path(path).read_text(encoding="utf-8-sig"))
     if not data.get("thrusters"):
         raise ValueError(f"{path}: no [[thrusters]]")
-    thrusters = tuple(_build(Thruster, t, f"{path}, thruster {k}")
+    thrusters = tuple(_thruster(t, f"{path}, thruster {k}")
                       for k, t in enumerate(data["thrusters"]))
     names = [t.name for t in thrusters]
     if len(set(names)) != len(names):

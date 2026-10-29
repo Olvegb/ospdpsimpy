@@ -18,7 +18,7 @@ import pytest
 from ospfmusim.thruster import thruster_dynamics
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
 from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
-from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
+from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster, load_layout
 from ospfmusim.thruster_ktkq import thruster_dynamics_ktkq
 from ospfmusim.thruster_ktkq.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
 
@@ -158,3 +158,13 @@ open_water = {[list(row) for row in OPEN_WATER]}
     assert ktkq.thruster1_thrust == pytest.approx(expected.thrust[0])
     assert ktkq.thruster1_shaft_speed == pytest.approx(expected.shaft_speed[0])
     assert ktkq.X == pytest.approx(expected.thrust[0])
+
+
+def test_max_azimuth_rpm_is_read_as_deg_per_s(tmp_path):
+    config = tmp_path / "config.toml"
+    entry = '[[thrusters]]\nname = "AZ"\nkind = "azimuth"\nx = 0.0\ny = 0.0\nmax_thrust = 1e3\n'
+    config.write_text(entry + "max_azimuth_rpm = 2.0\n")
+    assert load_layout(config).thrusters[0].max_azimuth_rate == pytest.approx(12.0)
+    config.write_text(entry + "max_azimuth_rpm = 2.0\nmax_azimuth_rate = 12.0\n")
+    with pytest.raises(ValueError, match="not both"):
+        load_layout(config)

@@ -84,7 +84,7 @@ Thrusters at the end of the simulation (utilisation 0.509, saturated False, turn
 
 The wind comes from the east, so it pushes the vessel west (east < 0) and gives a force to port (wind_Y < 0). The current pushes it north. The thrusters push back.
 
-Every run gets its own folder, `results/<YYYYMMDD_HHMMSS>[_name]/`, with one CSV per FMU and a copy of the
+Every run gets its own folder, `results/<YYYYMMDD_HHMMSS>[_name]/`, with one CSV per FMU, `real_time.csv` (wall-clock time at every step) and a copy of the
 config it was run with. Earlier runs are never overwritten.
 
 **Try it** (no rebuild needed, only `python -m ospfmusim.run` again, or use the [results app](#results-app)):
