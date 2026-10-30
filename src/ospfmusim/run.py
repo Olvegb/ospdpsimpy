@@ -145,7 +145,7 @@ def print_summary(run_dir):
           f"simulated for {config['simulation']['duration']} s")
     print(f"Wind:    {wind_speed:.1f} m/s from {environment['wind_direction_deg']:.1f} deg "
           "(NED, at the end)")
-    print(f"Current: {environment['current_speed']} m/s towards "
+    print(f"Current: {environment['current_speed']} m/s from "
           f"{environment['current_direction_deg']} deg (NED)")
 
     print("\nVessel at the end of the simulation:")

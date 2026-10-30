@@ -12,6 +12,7 @@ copy of it where some values are changed, and checks:
   4. Wind direction: a constant turning rate gives mean + rate * t, and the
      output always stays in [0, 360).
   5. Current: north and east components match speed and direction.
+     enabled = false in [wind], [waves] or [current] gives 0 for that part.
   6. Seed: the same seed gives the same wind, another seed another wind.
   7. Mean wind height profile (Sorensen 2018, eq. 6.25): U10 at 10 m, less
      below and more above, and the log law between two heights.
@@ -138,14 +139,23 @@ def test_random_direction_stays_in_range(environment):
     assert direction.min() >= 0.0 and direction.max() < 360.0
 
 
-@pytest.mark.parametrize("speed, towards", [(0.5, 0.0), (0.5, 90.0), (1.0, 225.0),
-                                            (0.8, 370.0)])
-def test_current_components(environment, speed, towards):
+@pytest.mark.parametrize("speed, from_deg", [(0.5, 0.0), (0.5, 90.0), (1.0, 225.0),
+                                             (0.8, 370.0)])
+def test_current_components(environment, speed, from_deg):
     fmu = environment({("current", "speed"): str(speed),
-                       ("current", "direction_deg"): str(towards)})
-    expected = (speed * cos(radians(towards)), speed * sin(radians(towards)))
+                       ("current", "direction_deg"): str(from_deg)})
+    # The current flows the opposite way of where it comes from.
+    expected = (-speed * cos(radians(from_deg)), -speed * sin(radians(from_deg)))
     np.testing.assert_allclose((fmu.current_north, fmu.current_east), expected, atol=1e-12)
     assert 0.0 <= fmu.current_direction_deg < 360.0
+
+
+def test_switched_off_parts_are_zero(environment):
+    fmu = environment({("wind", "enabled"): "false", ("waves", "enabled"): "false",
+                       ("current", "enabled"): "false"})
+    names = ("mean_wind_speed", "slowly_varying_wind_speed", "gust_wind_speed", "H_s",
+             "current_speed", "current_north", "current_east")
+    np.testing.assert_array_equal(run(fmu, 100.0, names), 0.0)
 
 
 def test_seed(environment):

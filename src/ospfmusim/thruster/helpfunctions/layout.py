@@ -140,6 +140,8 @@ class Layout:
     # per Nm of error in N (allocation.ThrustAllocator). A larger N weight
     # gives up sway or surge before heading.
     tau_weights: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    # False: the allocation is switched off and every thrust command is 0.
+    enabled: bool = True
 
     def __post_init__(self):
         if len(self.tau_weights) != 3 or min(self.tau_weights) < 0:
@@ -168,6 +170,7 @@ def load_layout(path):
     Read a thruster layout from the TOML config file (config.toml):
 
         [allocation]
+        enabled = true
         flushing_sectors = true
 
         [[power_sources]]
@@ -204,12 +207,13 @@ def load_layout(path):
         sources = tuple(_build(PowerSource, s, f"{path}, power source {k}")
                         for k, s in enumerate(sources))
     allocation = data.get("allocation", {})
-    unknown = set(allocation) - {"flushing_sectors", "tau_weights"}
+    unknown = set(allocation) - {"enabled", "flushing_sectors", "tau_weights"}
     if unknown:
         raise ValueError(f"{path}: unknown keys in [allocation]: {sorted(unknown)}")
-    if not isinstance(allocation.get("flushing_sectors", False), bool):
-        raise ValueError(f"{path}: flushing_sectors must be true or false, "
-                         f"got {allocation['flushing_sectors']!r}")
+    for key in ("enabled", "flushing_sectors"):
+        if not isinstance(allocation.get(key, False), bool):
+            raise ValueError(f"{path}: {key} must be true or false, "
+                             f"got {allocation[key]!r}")
     try:
         settings = {key: _tuples(value) for key, value in allocation.items()}
         return Layout(thrusters, sources, **settings)

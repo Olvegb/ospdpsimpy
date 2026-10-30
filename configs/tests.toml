@@ -22,8 +22,8 @@
 # Conventions:
 #   - Frames: NED for the environment, body frame (x forward, y starboard,
 #     z down) for the vessel and thrusters.
-#   - Angles in degrees, clockwise from north. Wind and waves: where they
-#     come FROM. Current: where it flows TO.
+#   - Angles in degrees, clockwise from north. Wind, waves and current:
+#     where they come FROM.
 #   - [name] starts a section, [[name]] adds one more entry to a list.
 #     Everything after # is a comment.
 # =====================================================================
@@ -56,6 +56,7 @@ air_density = 1.226             # [kg/m^3], DNV-ST-0111 [3.5]
 # or rate_deg_per_s = 0 and std_deg = 0.
 
 [wind]
+enabled = true                  # false: no wind (all wind speeds 0)
 mean_speed = 15.0               # U10, 1-hour mean wind speed at 10 m [m/s]
 direction_deg = 0.0             # mean direction the wind comes from [deg]
 reference_height = 10.0         # height z the wind is calculated for; mean_speed is at 10 m [m]
@@ -94,6 +95,7 @@ std_deg = 5.0                   # standard deviation of the slow random variatio
 #                           or short-crested depending on [waves.spreading].
 
 [waves]
+enabled = true                  # false: calm sea (H_s = 0)
 hs = 5.0                        # significant wave height H_s [m]  (regular: wave height H)
 tp = 9.0                        # peak wave period T_p [s]         (regular: wave period T)
 direction_deg = 45.0            # where the waves come from [deg]
@@ -127,8 +129,9 @@ random_directions = true        # random direction inside each bin
 # ---------------------------------------------------------------------
 
 [current]
+enabled = true                  # false: no current (speed 0)
 speed = 0.5                     # current speed [m/s]
-direction_deg = 0.0             # where the current flows TO [deg]
+direction_deg = 180.0           # where the current comes FROM [deg]
 
 
 # =====================================================================
@@ -243,6 +246,7 @@ wave_motion_std = [0.5, 0.5, 0.01]              # expected std of the WF motion 
 # Every key is explained in thruster/helpfunctions/layout.py and docs/thruster_fmus.md.
 
 [allocation]
+enabled = true                  # false: every thrust command is 0, the vessel drifts
 flushing_sectors = true         # add the DNV-ST-0111 [3.11.3] flushing sectors (needs diameter)
 # When the command is more than the thrusters can give: cost per N of error
 # in X and Y, and per Nm in N. Equal weights keep the heading first.

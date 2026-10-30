@@ -61,7 +61,7 @@ Expected output of `python -m ospfmusim.run --config configs/tests.toml --durati
 ```
 Vessel:  offshore_supply_vessel, simulated for 10.0 s
 Wind:    14.6 m/s from 97.3 deg (NED, at the end)
-Current: 0.5 m/s towards 0 deg (NED)
+Current: 0.5 m/s from 180.0 deg (NED)
 
 Vessel at the end of the simulation:
   north          =        3.734 m
@@ -189,7 +189,7 @@ Step by step, when you run `run_simulation()` or `python -m ospfmusim.run`:
 |---|---|---|
 | Wind direction (`[wind] direction_deg`) | wind comes **from** north | wind comes from east |
 | Wave direction (`[waves] direction_deg`) | waves come **from** north | waves come from east |
-| Current direction (`[current] direction_deg`) | current flows **towards** north | current flows towards east |
+| Current direction (`[current] direction_deg`) | current comes **from** north | current comes from east |
 | Heading (vessel `yaw`) | bow points north | bow points east |
 
 The relative wind (wind seen from the vessel) is calculated inside VesselBlock, from the wind direction, the heading and the vessel's own velocity.

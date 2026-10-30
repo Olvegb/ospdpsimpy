@@ -8,7 +8,8 @@
 3. Open-water curves (ThrusterDynamicsKtKq): an azimuth at bollard pull
    gives the commanded thrust, and loses thrust when it moves through the
    water. The two FMUs take the same inputs; only the KT/KQ one loses thrust.
-4. Ducted series (ThrusterDynamicsDucted): the Ka 4-70/19A polynomials match
+4. ThrustAllocation with enabled = false in [allocation]: every thrust command is 0.
+5. Ducted series (ThrusterDynamicsDucted): the Ka 4-70/19A polynomials match
    the series, and a unit at its rated rpm in bollard pull draws its rated power.
 
 License: MIT (see LICENSE in the repository root)
@@ -17,7 +18,7 @@ Authors: William Boland (2026)
 import numpy as np
 import pytest
 
-from ospfmusim.thruster import thruster_dynamics
+from ospfmusim.thruster import thrust_allocation, thruster_dynamics
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
 from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
 from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
@@ -164,6 +165,26 @@ open_water = {[list(row) for row in OPEN_WATER]}
     assert ktkq.X == pytest.approx(expected.thrust[0])
 
 
+def test_switched_off_allocation_gives_no_thrust(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text("""
+[allocation]
+enabled = false
+
+[[thrusters]]
+name = "AZ"
+kind = "azimuth"
+x = 0.0
+y = 0.0
+max_thrust = 200e3
+""")
+    fmu = thrust_allocation.ThrustAllocation(instance_name="allocation")
+    fmu.config_path = str(config)
+    fmu.tau_X_P = 50e3
+    fmu.exit_initialization_mode()
+    fmu.do_step(0.0, DT)
+    assert fmu.tau_X == 50e3
+    assert fmu.thruster1_thrust_command == 0.0
 def test_series_matches_ka_4_70_in_nozzle_19a():
     assert _poly(KT_19A, 0.0, 1.0) == pytest.approx(0.526, abs=5e-4)
     assert _poly(KQ_19A, 0.0, 1.0) == pytest.approx(0.044, abs=5e-4)

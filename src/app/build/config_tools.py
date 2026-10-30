@@ -101,6 +101,21 @@ def set_values(text, changes):
     return result
 
 
+def add_missing(text, values):
+    """config text with values = {("section", "key"): value} added right below [section]
+    where the key is not there yet. Sections that are not in the text are left out.
+    """
+    present = {(section, key) for _, section, key, *_ in lines_with_keys(text) if key}
+    out = []
+    for line in text.splitlines():
+        out.append(line)
+        if match := SECTION.match(line):
+            section = match["name"].strip()
+            out += [f"{k} = {format_value(v)}" for (s, k), v in values.items()
+                    if s == section and (s, k) not in present]
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
+
 def comments(text):
     """{("section", "key"): inline comment without '#'}, used as help texts."""
     return {(section, key): comment.lstrip("#").strip()
