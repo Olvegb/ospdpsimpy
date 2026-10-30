@@ -36,13 +36,13 @@
     <Simulators>
         <!-- The FMUs read config_path relative to the folder the simulation is
              started from (the repo folder). ospfmusim/run.py points it to the run's
-             own copy of the config. Use a full path, such as C:\...\configs\tests.toml,
+             own copy of the config. Use a full path, such as C:\...\configs\gunnerus.toml,
              if the tool runs from another folder (for example OSP-GUI). -->
         <!-- Wind, waves (sea state) and current, NED. See enviroment/environment.py. -->
         <Simulator name="environment" source="fmus/Environment.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
-                    <String value="configs/tests.toml"/>
+                    <String value="configs/gunnerus.toml"/>
                 </InitialValue>
             </InitialValues>
         </Simulator>
@@ -51,7 +51,7 @@
         <Simulator name="waves" source="fmus/Waves.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
-                    <String value="configs/tests.toml"/>
+                    <String value="configs/gunnerus.toml"/>
                 </InitialValue>
             </InitialValues>
         </Simulator>
@@ -60,7 +60,7 @@
         <Simulator name="vessel" source="fmus/VesselBlock.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
-                    <String value="configs/tests.toml"/>
+                    <String value="configs/gunnerus.toml"/>
                 </InitialValue>
             </InitialValues>
         </Simulator>
@@ -68,7 +68,7 @@
         <Simulator name="kalman_filter" source="fmus/ExtendedKalmanFilter.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
-                    <String value="configs/tests.toml"/>
+                    <String value="configs/gunnerus.toml"/>
                 </InitialValue>
             </InitialValues>
         </Simulator>
@@ -76,7 +76,7 @@
         <Simulator name="dp_controller" source="fmus/DPController.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
-                    <String value="configs/tests.toml"/>
+                    <String value="configs/gunnerus.toml"/>
                 </InitialValue>
             </InitialValues>
         </Simulator>
@@ -84,17 +84,19 @@
         <Simulator name="allocation" source="fmus/ThrustAllocation.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
-                    <String value="configs/tests.toml"/>
+                    <String value="configs/gunnerus.toml"/>
                 </InitialValue>
             </InitialValues>
         </Simulator>
 
-        <!-- ThrusterDynamics: thrust = lagged command. For the thrust from the KT/KQ propeller
-             curves (open_water in the config), use source="fmus/ThrusterDynamicsKtKq.fmu". -->
-        <Simulator name="dynamics" source="fmus/ThrusterDynamics.fmu">
+        <!-- ThrusterDynamicsKtKq: thrust from the KT/KQ propeller curves (open_water in the
+             config). For thrust = lagged command, use source="fmus/ThrusterDynamics.fmu".
+             For the Ka 4-70 / nozzle 19A ducted series (rated_rpm in the config), use
+             source="fmus/ThrusterDynamicsDucted.fmu". -->
+        <Simulator name="dynamics" source="fmus/ThrusterDynamicsKtKq.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
-                    <String value="configs/tests.toml"/>
+                    <String value="configs/gunnerus.toml"/>
                 </InitialValue>
             </InitialValues>
         </Simulator>
@@ -1759,7 +1761,7 @@
         </VariableConnection>
 
         <!-- vessel, environment -> dynamics: speed through the water for the propeller curves
-             (only ThrusterDynamicsKtKq uses it) -->
+             (only ThrusterDynamicsKtKq and ThrusterDynamicsDucted use it) -->
         <VariableConnection>
             <Variable simulator="vessel" name="lf_u"/>
             <Variable simulator="dynamics" name="u"/>
