@@ -316,6 +316,13 @@ open_water = [
     [0.9, 0.290, 0.0688], [1.0, 0.238, 0.0637], [1.1, 0.184, 0.0577],
     [1.2, 0.128, 0.0508],
 ]
+# Ka 4-70 / nozzle 19A ducted series, only used by the ThrusterDynamicsDucted
+# FMU. P/D is set so the unit absorbs power_kw at rated_rpm in bollard pull.
+# 198 rpm is NOT measured: it is what the PMAZM KQ0 above gives at 500 kW
+# (P/D 1.36, KT0 0.83 in the series). Replace it with the rated rpm from the data.
+rated_rpm = 198.0
+c_t = 1.0                       # scale on the series KT; fit to bollard pull / thrust data
+c_q = 1.0                       # scale on the series KQ; fit to logged shaft power
 
 [[thrusters]]
 name = "AZ2"                 # starboard azimuth
@@ -336,9 +343,12 @@ open_water = [                  # Gunnerus PMAZM, see AZ1
     [0.9, 0.290, 0.0688], [1.0, 0.238, 0.0637], [1.1, 0.184, 0.0577],
     [1.2, 0.128, 0.0508],
 ]
+rated_rpm = 198.0               # ducted series, see AZ1
+c_t = 1.0
+c_q = 1.0
 
 [[thrusters]]
-name = "BT1"                    # bow tunnel; positive thrust pushes to starboard
+name = "BT1"                  # bow tunnel; positive thrust pushes to starboard
 kind = "tunnel"
 x = 14.5476
 y = 0.0

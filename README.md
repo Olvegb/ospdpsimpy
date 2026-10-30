@@ -11,12 +11,12 @@ The Python package is `ospfmusim` (in `src/ospfmusim/`). A complete DP (dynamic 
 
 The results can be read in a small web app, see [Results app](#results-app).
 
-Every constant is in one config file in `configs/`; `src/ospfmusim/OspSystemStructure.xml` says which one is used by default (`configs/tests.toml`). Each FMU reads that file itself when the simulation starts, so you can change constants and run again **without rebuilding the FMUs**.
+Every constant is in one config file in `configs/`; `src/ospfmusim/OspSystemStructure.xml` says which one is used by default (`configs/gunnerus.toml`). Each FMU reads that file itself when the simulation starts, so you can change constants and run again **without rebuilding the FMUs**.
 
 | Config | Vessel |
 |---|---|
-| `configs/tests.toml` (the default) | Wind geometry and 3-DOF matrices in `[vessel]` are **placeholder values** for an 88 m OSV. The hull hydrodynamics come from the Gunnerus `.mat` file. |
-| `configs/gunnerus.toml` | RV Gunnerus: wind geometry, and 3-DOF matrices copied from the Gunnerus `.mat` file. |
+| `configs/gunnerus.toml` (the default) | RV Gunnerus: wind geometry, and 3-DOF matrices copied from the Gunnerus `.mat` file. |
+| `configs/tests.toml` | Wind geometry and 3-DOF matrices in `[vessel]` are **placeholder values** for an 88 m OSV. The hull hydrodynamics come from the Gunnerus `.mat` file. |
 
 > **The vessel data file is not in the repository.** Both configs read the hydrodynamic data from `data_examples/GunnerusL35_20201112.mat` (`[vessel_fmu] mat_file`). Put the file there before you run. `src/ospfmusim/hull/helpfunctions/example_test_config.json` is **synthetic** test data, used only by `tests/test_vessel_fmu.py`.
 
@@ -56,7 +56,7 @@ run_dir = run_simulation("data_examples/GunnerusL35_20201112.mat", "configs/test
                          "src/ospfmusim/OspSystemStructure.xml", duration=10.0)
 ```
 
-Expected output of `python -m ospfmusim.run` (10 s, `configs/tests.toml`):
+Expected output of `python -m ospfmusim.run --config configs/tests.toml --duration 10`:
 
 ```
 Vessel:  offshore_supply_vessel, simulated for 10.0 s
@@ -140,6 +140,7 @@ Every FMU gets the same copy of the model folders of `src/ospfmusim` in its `res
 | `src/ospfmusim/controller/dp_controller.py` | DPController FMU, everything in one file | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/thruster/thrust_allocation.py`, `src/ospfmusim/thruster/thruster_dynamics.py` | ThrustAllocation and ThrusterDynamics FMUs. Thin wrappers around `thruster/helpfunctions/` | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/thruster_ktkq/` | ThrusterDynamicsKtKq FMU: ThrusterDynamics with the thrust from KT/KQ propeller curves, to swap in and compare. See [docs/thruster_fmus.md](docs/thruster_fmus.md) §4.1 | When the logic changes. Rebuilt by itself. |
+| `src/ospfmusim/thruster_ducted/` | ThrusterDynamicsDucted FMU: ThrusterDynamicsKtKq with the curves from the Ka 4-70 / nozzle 19A ducted series, set by `rated_rpm`, `c_t` and `c_q`. See [docs/thruster_fmus.md](docs/thruster_fmus.md) §4.2 | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/*/helpfunctions/` | The wave, vessel and thruster logic. Built into every FMU's `resources/` | When the logic changes. Rebuilt by itself. |
 | `tests/` | The pytest tests: one `test_*.py` per part (environment, waves, vessel, Kalman filter, controller, thrusters). Most run the FMU classes directly in Python, without OSP; `test_vessel_fmu.py` runs the built VesselBlock FMU | When that logic changes |
 | `src/ospfmusim/build.py` | `build_fmus()`: builds the FMUs the system structure uses into `src/ospfmusim/fmus/`, only those that have changed | When an FMU is added |

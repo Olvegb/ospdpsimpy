@@ -9,6 +9,8 @@
    gives the commanded thrust, and loses thrust when it moves through the
    water. The two FMUs take the same inputs; only the KT/KQ one loses thrust.
 4. ThrustAllocation with enabled = false in [allocation]: every thrust command is 0.
+5. Ducted series (ThrusterDynamicsDucted): the Ka 4-70/19A polynomials match
+   the series, and a unit at its rated rpm in bollard pull draws its rated power.
 
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland (2026)
@@ -20,6 +22,8 @@ from ospfmusim.thruster import thrust_allocation, thruster_dynamics
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
 from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
 from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
+from ospfmusim.thruster_ducted.helpfunctions.dynamics_ducted import (KQ_19A, KT_19A,
+                                                                      ThrusterDynamicsDucted, _poly)
 from ospfmusim.thruster_ktkq import thruster_dynamics_ktkq
 from ospfmusim.thruster_ktkq.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
 
@@ -181,3 +185,28 @@ max_thrust = 200e3
     fmu.do_step(0.0, DT)
     assert fmu.tau_X == 50e3
     assert fmu.thruster1_thrust_command == 0.0
+def test_series_matches_ka_4_70_in_nozzle_19a():
+    assert _poly(KT_19A, 0.0, 1.0) == pytest.approx(0.526, abs=5e-4)
+    assert _poly(KQ_19A, 0.0, 1.0) == pytest.approx(0.044, abs=5e-4)
+
+
+def ducted_azimuth():
+    """A Gunnerus-like ducted azimuth: 1.9 m, 500 kW at 198 rpm."""
+    return ThrusterDynamicsDucted(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=1.9,
+                                                   power_kw=500.0, rated_rpm=198.0),)))
+
+
+def test_ducted_draws_rated_power_at_rated_rpm():
+    model = ducted_azimuth()
+    n = 198.0 / 60
+    thrust = RHO * 1.9**4 * model._curves[0][0](0.0) * n**2      # the Tn that gives rated n
+    state = model.step([thrust], [0.0])
+    assert state.thrust[0] == pytest.approx(thrust)
+    assert state.shaft_speed[0] == pytest.approx(n)
+    assert state.power_kw[0] == pytest.approx(500.0)
+
+
+def test_ducted_loses_thrust_with_speed():
+    model = ducted_azimuth()
+    model.velocity = (2.0, 0.0, 0.0)
+    assert model.step([THRUST], [0.0]).thrust[0] < THRUST
