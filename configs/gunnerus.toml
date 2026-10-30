@@ -22,8 +22,8 @@
 # Conventions:
 #   - Frames: NED for the environment, body frame (x forward, y starboard,
 #     z down) for the vessel and thrusters.
-#   - Angles in degrees, clockwise from north. Wind and waves: where they
-#     come FROM. Current: where it flows TO.
+#   - Angles in degrees, clockwise from north. Wind, waves and current:
+#     where they come FROM.
 #   - [name] starts a section, [[name]] adds one more entry to a list.
 #     Everything after # is a comment.
 # =====================================================================
@@ -128,7 +128,7 @@ random_directions = true        # random direction inside each bin
 
 [current]
 speed = 0                     # current speed [m/s]
-direction_deg = 0.0             # where the current flows TO [deg]
+direction_deg = 180.0           # where the current comes FROM [deg]
 
 
 # =====================================================================

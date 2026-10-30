@@ -32,14 +32,14 @@ def unit(going_to_deg):
 def environment_series(environment):
     """[(name, going-to direction [deg] per row, size per row, unit)] for wind, waves and current.
 
-    Wind and waves are given as where they come from (+180), the current as where it flows to.
+    Wind, waves and current are given as where they come from (+180).
     """
     return [
         ("Wind", (environment["wind_direction_deg"].to_numpy() + 180.0) % 360.0,
          data.total_wind_speed(environment).to_numpy(), "m/s"),
         ("Waves", (environment["wave_direction_deg"].to_numpy() + 180.0) % 360.0,
          environment["H_s"].to_numpy(), "m H_s"),
-        ("Current", environment["current_direction_deg"].to_numpy() % 360.0,
+        ("Current", (environment["current_direction_deg"].to_numpy() + 180.0) % 360.0,
          environment["current_speed"].to_numpy(), "m/s"),
     ]
 

@@ -193,7 +193,7 @@ with tabs[1]:
             f"- **Waves:** H_s {waves.get('hs', '?')} m, T_p {waves.get('tp', '?')} s, "
             f"from {waves.get('direction_deg', '?')}° ({waves.get('sea_type', '?')})\n"
             f"- **Current:** {current.get('speed', '?')} m/s "
-            f"towards {current.get('direction_deg', '?')}°\n"
+            f"from {current.get('direction_deg', '?')}°\n"
             f"- **Duration:** {config.get('simulation', {}).get('duration', '?')} s\n"
             f"- **Thrusters:** {thrusters}"
         )
@@ -292,7 +292,7 @@ with tabs[3]:
         with c1:
             show(line_plot([("Wind (from)", env["wind_direction_deg"]),
                             ("Waves (from)", env["wave_direction_deg"]),
-                            ("Current (towards)", env["current_direction_deg"])],
+                            ("Current (from)", env["current_direction_deg"])],
                            "Directions", "[deg]"))
         with c2:
             show(line_plot([("North", env["current_north"]), ("East", env["current_east"])],

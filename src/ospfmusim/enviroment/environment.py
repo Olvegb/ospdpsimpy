@@ -163,7 +163,7 @@ class Environment(Fmi2Slave):
 
         # OUTPUTS: current, NED frame, passed straight on from the config file.
         self.current_speed = 0.0            # [m/s]
-        # Where the current flows TO, clockwise from north [deg]
+        # Where the current comes FROM, clockwise from north [deg]
         self.current_direction_deg = 0.0
         self.current_north = 0.0            # north component of the current velocity [m/s]
         self.current_east = 0.0             # east component of the current velocity [m/s]
@@ -218,8 +218,9 @@ class Environment(Fmi2Slave):
         current = config["current"]
         self.current_speed = float(current["speed"])
         self.current_direction_deg = float(current["direction_deg"]) % 360.0
-        self.current_north = self.current_speed * cos(radians(self.current_direction_deg))
-        self.current_east = self.current_speed * sin(radians(self.current_direction_deg))
+        # The velocity points the opposite way of where the current comes from.
+        self.current_north = -self.current_speed * cos(radians(self.current_direction_deg))
+        self.current_east = -self.current_speed * sin(radians(self.current_direction_deg))
 
         # Calculate the outputs once already now, so they are correct from
         # time 0 and not 0.0 until the first step.

@@ -35,7 +35,7 @@ flowchart LR
 | `H_s`, `T_p` | m, s | Waves | Significant wave height and peak period, from `[waves]` |
 | `wave_direction_deg` | deg | Waves | Where the waves come **from**, clockwise from north |
 | `current_speed` | m/s | logging | Current speed |
-| `current_direction_deg` | deg | logging | Where the current flows **to**, clockwise from north |
+| `current_direction_deg` | deg | logging | Where the current comes **from**, clockwise from north |
 | `current_north`, `current_east` | m/s | VesselBlock | Current velocity components, NED |
 
 The total wind speed V = V_mean + V_sv + V_gust is **not** an output. It is added up where it is used
@@ -117,8 +117,11 @@ wave components (see [waves_fmu.md](waves_fmu.md)). The current is given as spee
 `configs/*.toml` and sent out both that way and as NED components:
 
 ```
-current_north = V_c cos(β_c),    current_east = V_c sin(β_c)
+current_north = -V_c cos(β_c),    current_east = -V_c sin(β_c)
 ```
+
+β_c is where the current comes from, like the wind and the waves, so the velocity points the
+opposite way.
 
 ### Switching parts off
 
@@ -152,7 +155,7 @@ wind every run. The waves have their own `seed` in `[waves]`.
 | `[wind.direction_variation] rate_deg_per_s` | Constant turning rate, clockwise positive [deg/s] |
 | `[wind.direction_variation] time_constant`, `std_deg` | T [s] and σ [deg] of β_sv |
 | `[waves] hs`, `tp`, `direction_deg` | Sea state, sent on to the Waves FMU |
-| `[current] speed`, `direction_deg` | Current speed [m/s] and where it flows to [deg] |
+| `[current] speed`, `direction_deg` | Current speed [m/s] and where it comes from [deg] |
 
 **Changing `configs/*.toml` needs no rebuild.**
 

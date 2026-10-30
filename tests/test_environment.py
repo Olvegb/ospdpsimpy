@@ -138,12 +138,13 @@ def test_random_direction_stays_in_range(environment):
     assert direction.min() >= 0.0 and direction.max() < 360.0
 
 
-@pytest.mark.parametrize("speed, towards", [(0.5, 0.0), (0.5, 90.0), (1.0, 225.0),
-                                            (0.8, 370.0)])
-def test_current_components(environment, speed, towards):
+@pytest.mark.parametrize("speed, from_deg", [(0.5, 0.0), (0.5, 90.0), (1.0, 225.0),
+                                             (0.8, 370.0)])
+def test_current_components(environment, speed, from_deg):
     fmu = environment({("current", "speed"): str(speed),
-                       ("current", "direction_deg"): str(towards)})
-    expected = (speed * cos(radians(towards)), speed * sin(radians(towards)))
+                       ("current", "direction_deg"): str(from_deg)})
+    # The current flows the opposite way of where it comes from.
+    expected = (-speed * cos(radians(from_deg)), -speed * sin(radians(from_deg)))
     np.testing.assert_allclose((fmu.current_north, fmu.current_east), expected, atol=1e-12)
     assert 0.0 <= fmu.current_direction_deg < 360.0
 
