@@ -129,10 +129,12 @@ Set the part to 0 in `configs/*.toml`. No rebuild is needed:
 
 | Part | Set |
 |---|---|
+| All wind | `[wind] enabled = false` (all wind speeds 0) |
+| Waves | `[waves] enabled = false` (H_s = 0, calm sea) |
 | Slowly varying wind speed | `[wind.slowly_varying] std = 0` |
 | Gusts | `[wind.gust] n_components = 0` |
 | Direction variation | `[wind.direction_variation] rate_deg_per_s = 0` and `std_deg = 0` |
-| Current | `[current] speed = 0` |
+| Current | `[current] enabled = false` or `speed = 0` |
 
 ### Randomness
 

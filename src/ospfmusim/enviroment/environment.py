@@ -1,7 +1,8 @@
 """Environment FMU: Changes the enviroment during simulation.
 
 Reads the wind, wave and current parameters from the config file. All outputs are in
-the earth-fixed NED frame; the FMU knows nothing about the vessel.
+the earth-fixed NED frame; the FMU knows nothing about the vessel. Each of the three
+is switched off with enabled = false in its section: then its speed (or H_s) is 0.
 
 The wind model follows Sorensen, Marine Cybernetics lecture notes (2018), section 6.2.2.
 
@@ -132,6 +133,7 @@ class Environment(Fmi2Slave):
                                       variability=Fmi2Variability.fixed))
 
         # CONSTANTS: read from [wind] in the config file in exit_initialization_mode.
+        self.wind_enabled = True            # false: all wind speeds are 0
         self.mean_speed_10m = 0.0           # U10, 1-hour mean wind speed at 10 m [m/s]
         self.mean_wind_direction_deg = 0.0  # where the wind comes from, clockwise from north [deg]
         self.direction_rate = 0.0           # constant turning rate [deg/s]
@@ -209,14 +211,19 @@ class Environment(Fmi2Slave):
         self.direction_sv = GaussMarkov(float(direction["time_constant"]),
                                         float(direction["std_deg"]), rng)
 
+        self.wind_enabled = bool(wind.get("enabled", True))
+        if not self.wind_enabled:
+            self.mean_wind_speed = 0.0
+
         waves = config["waves"]
-        self.hs = float(waves["hs"])
+        # Switched off: H_s = 0, which the Waves FMU turns into a calm sea.
+        self.hs = float(waves["hs"]) if waves.get("enabled", True) else 0.0
         self.tp = float(waves["tp"])
         self.waves_from_deg = float(waves["direction_deg"])
 
         # The current is constant, so the outputs are set once here.
         current = config["current"]
-        self.current_speed = float(current["speed"])
+        self.current_speed = float(current["speed"]) if current.get("enabled", True) else 0.0
         self.current_direction_deg = float(current["direction_deg"]) % 360.0
         # The velocity points the opposite way of where the current comes from.
         self.current_north = -self.current_speed * cos(radians(self.current_direction_deg))
@@ -231,9 +238,11 @@ class Environment(Fmi2Slave):
         t = current_time + step_size
 
         # Wind speed parts. The total is calculated where it is used.
-        self.slowly_varying_wind_speed = self.speed_sv.step(step_size)
-        self.gust_wind_speed = sum((amplitude * cos(omega * t + phase)
-                                    for omega, amplitude, phase in self.gust_components), 0.0)
+        if self.wind_enabled:
+            self.slowly_varying_wind_speed = self.speed_sv.step(step_size)
+            self.gust_wind_speed = sum((amplitude * cos(omega * t + phase)
+                                        for omega, amplitude, phase in self.gust_components),
+                                       0.0)
 
         # Wind direction
         direction = (self.mean_wind_direction_deg + self.direction_rate * t

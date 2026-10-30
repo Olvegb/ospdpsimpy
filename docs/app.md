@@ -34,7 +34,10 @@ FMU to it, so `OspSystemStructure.xml` is not changed. Relative file paths in th
 2. **Edit the values.** One input per value, grouped as in the config file: simulation, wind, waves,
    current, vessel, DP controller, Kalman filter and thrust allocation. Hover the ⓘ to see the comment
    from the config file. Lists with up to three numbers get one input per number; longer lists are
-   comma-separated.
+   comma-separated. The toggles **Wind**, **Waves**, **Current** and **Thrust allocation** above the
+   groups switch each part off (`enabled` in its section): no wind, a calm sea, no current, or
+   no thrust (the vessel drifts; the controller and filter still run). A config without
+   `enabled` gets it, switched on.
 3. **Run name** (optional) is added to the folder name.
 4. **Run simulation.** The app writes a copy of the config with your changes, runs
    `python -m ospfmusim.run` with it, and selects the new run in the sidebar. The output of the script is

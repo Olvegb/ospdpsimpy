@@ -19,6 +19,9 @@ The FMU's life cycle:
                                 starts. The config file is read here.
   4. do_step                    Runs every time step. The allocation runs here.
 
+With enabled = false in [allocation] every thrust command is 0 (the vessel
+drifts); tau is still logged.
+
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland, Olve Grønås Birkeland (2026)
 """
@@ -111,6 +114,8 @@ class ThrustAllocation(Fmi2Slave):
         available = [getattr(self, f"thruster{k}_available") for k in range(1, n + 1)]
         for dof in DOFS:
             setattr(self, f"tau_{dof}", sum(getattr(self, f"tau_{dof}_{term}") for term in TERMS))
+        if not self.allocator.layout.enabled:
+            return                                 # switched off: the commands stay 0
         command = self.allocator.step((self.tau_X, self.tau_Y, self.tau_N), available, dt)
         for k, (thrust, angle) in enumerate(zip(command.thrust, command.azimuth_deg), start=1):
             setattr(self, f"thruster{k}_thrust_command", float(thrust))

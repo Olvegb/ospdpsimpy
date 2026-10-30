@@ -185,17 +185,21 @@ with tabs[1]:
         wind = config.get("wind", {})
         waves = config.get("waves", {})
         current = config.get("current", {})
+        off = {name: " **(off)**" if not section.get("enabled", True) else ""
+               for name, section in (("wind", wind), ("waves", waves), ("current", current),
+                                     ("allocation", config.get("allocation", {})))}
         thrusters = ", ".join(name for _, name in data.thruster_slots(config)) or "none"
         st.markdown(
             f"- **Vessel:** {config.get('vessel', {}).get('type', '?')}\n"
-            f"- **Wind:** {wind.get('mean_speed', '?')} m/s "
+            f"- **Wind:**{off['wind']} {wind.get('mean_speed', '?')} m/s "
             f"from {wind.get('direction_deg', '?')}°\n"
-            f"- **Waves:** H_s {waves.get('hs', '?')} m, T_p {waves.get('tp', '?')} s, "
+            f"- **Waves:**{off['waves']} H_s {waves.get('hs', '?')} m, T_p {waves.get('tp', '?')} s, "
             f"from {waves.get('direction_deg', '?')}° ({waves.get('sea_type', '?')})\n"
-            f"- **Current:** {current.get('speed', '?')} m/s "
+            f"- **Current:**{off['current']} {current.get('speed', '?')} m/s "
             f"from {current.get('direction_deg', '?')}°\n"
             f"- **Duration:** {config.get('simulation', {}).get('duration', '?')} s\n"
             f"- **Thrusters:** {thrusters}"
+            + (", allocation **off** (no thrust)" if off["allocation"] else "")
         )
 
     vessel = R("vessel")

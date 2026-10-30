@@ -36,6 +36,19 @@ GROUPS = [
     ("Thrust allocation", ["allocation"]),
 ]
 
+# The parts that can be switched off with one toggle: (title, section, what off means).
+# Each is enabled = true/false in its section.
+SWITCHES = [
+    ("Wind", "wind", "Off: no wind, all wind speeds are 0."),
+    ("Waves", "waves", "Off: calm sea, H_s = 0."),
+    ("Current", "current", "Off: no current, speed 0."),
+    ("Thrust allocation", "allocation",
+     "Off: every thrust command is 0, so the vessel drifts. The DP controller and the "
+     "Kalman filter still run."),
+]
+# Configs without the key get it, switched on, so the toggle can be shown and saved.
+SWITCH_DEFAULTS = {(section, "enabled"): True for _, section, _ in SWITCHES}
+
 CHOICES = {
     ("waves", "sea_type"): ["regular", "irregular"],
     ("waves.spectrum", "type"): ["jonswap", "pierson_moskowitz"],
@@ -145,7 +158,8 @@ def render():
     source = dict(sources)[source_label]
     # Save as default writes to the chosen file in configs/, or the default one for a run's config.
     target_index = labels.index(source_label) if source_label in dict(configs) else start
-    base_text = source.read_text(encoding="utf-8-sig")
+    base_text = config_tools.add_missing(source.read_text(encoding="utf-8-sig"),
+                                         SWITCH_DEFAULTS)
     base = tomllib.loads(base_text)
     help_texts = config_tools.comments(base_text)
     choices = {**CHOICES, ("vessel", "type"): sorted(base.get("blendermann", {}))}
@@ -163,10 +177,18 @@ def render():
     with st.form("new_run", enter_to_submit=False):
         name = st.text_input("Run name (optional)", placeholder="for example high_wind",
                              help="Added to the folder name: results/<time stamp>_<name>")
+        columns = st.columns(len(SWITCHES))
+        for column, (title, section, help_text) in zip(columns, SWITCHES):
+            if (section, "enabled") in keys:
+                with column:
+                    values[(section, "enabled")] = st.toggle(
+                        title, value=lookup(base, section, "enabled"), help=help_text,
+                        key=f"{prefix}|{section}|enabled")
         for title, sections in GROUPS:
             with st.expander(title, expanded=title in ("Simulation", "Wind")):
                 for section in sections:
-                    section_keys = [(s, k) for s, k in keys if s == section]
+                    # enabled is the toggle above the groups.
+                    section_keys = [(s, k) for s, k in keys if s == section and k != "enabled"]
                     if not section_keys:
                         continue
                     st.markdown(f"**[{section}]**")
@@ -193,7 +215,8 @@ def render():
 
     if save_clicked:
         target = dict(configs)[target_label]
-        default_text = target.read_text(encoding="utf-8-sig")
+        default_text = config_tools.add_missing(target.read_text(encoding="utf-8-sig"),
+                                                SWITCH_DEFAULTS)
         default = tomllib.loads(default_text)
         to_save = {k: v for k, v in values.items()
                    if k in editable_keys(default_text) and v != lookup(default, *k)}
