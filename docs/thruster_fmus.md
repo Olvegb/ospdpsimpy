@@ -20,12 +20,15 @@ flowchart LR
 - **ThrusterDynamicsKtKq** (`src/ospfmusim/thruster_ktkq/`) is ThrusterDynamics with the thrust and
   power from KT/KQ propeller curves (§4.1). It replaces ThrusterDynamics as the `dynamics` simulator,
   to compare the two.
+- **ThrusterDynamicsDucted** (`src/ospfmusim/thruster_ducted/`) is ThrusterDynamicsKtKq with the curves
+  from the Ka 4-70 / nozzle 19A ducted propeller series, set by the rating and two calibration
+  factors (§4.2). It swaps in the same way.
 
 ## 1. What you need to run them
 
 | File | What it is |
 |---|---|
-| `ThrustAllocation.fmu`, `ThrusterDynamics.fmu` (or `ThrusterDynamicsKtKq.fmu`) | The two FMUs (win64 and linux64 binaries). Not in git: built into `src/ospfmusim/fmus/` by `python -m ospfmusim.build` (and by `python -m ospfmusim.run`) |
+| `ThrustAllocation.fmu`, `ThrusterDynamics.fmu` (or `ThrusterDynamicsKtKq.fmu`, `ThrusterDynamicsDucted.fmu`) | The two FMUs (win64 and linux64 binaries). Not in git: built into `src/ospfmusim/fmus/` by `python -m ospfmusim.build` (and by `python -m ospfmusim.run`) |
 | `configs/*.toml` | The thruster layout. Both FMUs read it themselves at start-up |
 
 - **Python must be installed.** pythonfmu FMUs do not bundle Python; they use the Python on the
@@ -176,6 +179,41 @@ It has every variable of ThrusterDynamics, and two more outputs per slot:
 (and back); every connection stays the same. `python -m ospfmusim.run --name ktkq` builds it, and the
 app shows both runs.
 
+### 4.2 ThrusterDynamicsDucted FMU
+
+ThrusterDynamicsKtKq with KT(J) and KQ(J) from a standard ducted series instead of the `open_water` table,
+for every thruster with `rated_rpm` in the config. The series gives the shape of the curves, and two scale
+factors set their level from vessel data. Without data the factors stay at 1, so the same model works for
+any vessel. The code is in `src/ospfmusim/thruster_ducted/`: `helpfunctions/dynamics_ducted.py`
+subclasses `thruster_ktkq/helpfunctions/dynamics_ktkq.py` and only changes where the curves come from.
+Thrusters without `rated_rpm` behave as in ThrusterDynamicsKtKq.
+
+1. **Base curves.** The Oosterveld (1973) polynomials for the Wageningen Ka 4-70 propeller in nozzle 19A give
+   KT(J, P/D) (propeller + duct) and KQ(J, P/D).
+2. **P/D from the rating.** P/D is chosen so the unit absorbs `power_kw` at `rated_rpm` in bollard pull:
+   `KQ0 = P / (2π·ρ·n³·D⁵)`. No blade geometry is needed. It must fall within the series,
+   0.6 ≤ P/D ≤ 1.4, or the FMU stops at start-up.
+3. **Calibration.** `KT = c_t·KT_series`, `KQ = c_q·KQ_series`. Fit `c_q` to logged shaft power, rpm and
+   speed, and `c_t` to bollard pull or thrust data. They absorb what the series does not represent:
+   rim drive, stators, custom duct and scale effects.
+4. **Thrust and power** follow §4.1: n from the nominal thrust Tn, `Ja = (1 − w)·V / (n·D)`,
+   `Ta = ρD⁴·KT(Ja)·n|n|`, `P = 2π·n·Qa`. Ja is held in [0, J(KT = 0)], the first quadrant: inflow from
+   behind gives the bollard values, and beyond J(KT = 0) there is no thrust.
+
+Because the thrust is commanded, c_t cancels out of Ta at bollard pull. It sets the shaft speed for a given
+thrust, and through that J and the power.
+
+Not modelled:
+- The duct's share of the thrust (KTN), which isn't needed for the force.
+- Thrust deduction: it enters only as `c_t·(1 − t)`, so `c_t` absorbs it.
+- Cross-flow on the duct.
+- Reverse thrust curves: negative thrust uses the same curve, which is fine for azimuths, since they turn
+  instead.
+- The fit of c_t and c_q itself, which is done offline from data.
+
+It has the same variables as ThrusterDynamicsKtKq. To compare, set the `dynamics` simulator's source to
+`fmus/ThrusterDynamicsDucted.fmu`; `python -m ospfmusim.run --name ducted` builds it.
+
 ## 5. Connecting them in `OspSystemStructure.xml`
 
 Simulator and variable names on the other FMUs (`dp`, `vessel`, …) are placeholders.
@@ -288,6 +326,8 @@ max_azimuth_rate = 10.0       # [deg/s]
 | `max_azimuth_rate` | no | [deg/s]. Without it the azimuth turns at once |
 | `open_water` | no | Open-water curves `[[J, KT, KQ], …]`, J increasing and covering 0, interpolated linearly (end values held outside). Two rows give the linear model (8.10). Needs `diameter`. Only used by ThrusterDynamicsKtKq (§4.1) |
 | `wake_fraction` | no | w in `Va = (1 − w)·V` (8.12). Default 0 |
+| `rated_rpm` | no | Shaft speed [rpm] at `power_kw` in bollard pull. Sets P/D of the Ka 4-70/19A series and switches it on for the thruster. Needs `diameter` and `power_kw`. Only used by ThrusterDynamicsDucted (§4.2) |
+| `c_t`, `c_q` | no | Scale factors on the series KT and KQ, fitted to thrust and power data. Default 1 |
 
 The thruster layout in `configs/tests.toml` is a made-up ~80 m PSV: two azimuths aft (AZ1 port, AZ2 starboard,
 x = −40 m) and two bow tunnels (BT1, BT2), two 3600 kW switchboards with a 10% reserve. The time

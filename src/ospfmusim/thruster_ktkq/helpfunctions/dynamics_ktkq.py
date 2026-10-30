@@ -30,7 +30,7 @@ class State(dynamics.State):
     torque: np.ndarray  # propeller torque Qa [Nm], signed like n; 0 without open_water
 
 
-def propeller(thruster, nominal_thrust, speed):
+def propeller(thruster, nominal_thrust, speed, kt, kq):
     """
     Actual thrust, shaft speed and torque of a speed-controlled propeller
     (Sørensen 2018, ch. 8).
@@ -48,12 +48,14 @@ def propeller(thruster, nominal_thrust, speed):
     Parameters
     ----------
     thruster : layout.Thruster
-        With open_water.
+        With diameter.
     nominal_thrust : float
         Tn [N], signed.
     speed : float
         Speed of the thruster through the water along its direction of
         positive thrust [m/s].
+    kt, kq : callable
+        KT(J) and KQ(J), from ThrusterDynamicsKtKq.curves().
 
     Returns
     -------
@@ -61,19 +63,16 @@ def propeller(thruster, nominal_thrust, speed):
         Ta [N], n [rps], Qa [Nm], all signed like nominal_thrust.
     """
     # ponytail: ideal speed loop (n follows Tn at once, 8.9.7), one curve for
-    # both directions (no KT0r/KQ0r, 8.45), np.interp holds the end values
-    # outside the table, no ventilation or interaction losses (8.6). Add the
-    # shaft model (8.30) or reverse curves when the data is there.
+    # both directions (no KT0r/KQ0r, 8.45), no ventilation or interaction
+    # losses (8.6). Add the shaft model (8.30) or reverse curves when the
+    # data is there.
     d = thruster.diameter
-    n = math.copysign(math.sqrt(abs(nominal_thrust) / (RHO * d**4 * thruster.kt0)),
-                      nominal_thrust)
+    n = math.copysign(math.sqrt(abs(nominal_thrust) / (RHO * d**4 * kt(0.0))), nominal_thrust)
     if n == 0:
         return 0.0, 0.0, 0.0
     ja = (1 - thruster.wake_fraction) * speed / (n * d)  # Va / (|n| D), Va signed along the thrust
-    j, kt, kq = zip(*thruster.open_water)
     n2 = n * abs(n)
-    return (RHO * d**4 * float(np.interp(ja, j, kt)) * n2, n,
-            RHO * d**5 * float(np.interp(ja, j, kq)) * n2)
+    return RHO * d**4 * kt(ja) * n2, n, RHO * d**5 * kq(ja) * n2
 
 
 class ThrusterDynamicsKtKq(dynamics.ThrusterDynamics):
@@ -92,6 +91,18 @@ class ThrusterDynamicsKtKq(dynamics.ThrusterDynamics):
         # (u_r, v_r, r): the vessel's velocity relative to the water in the
         # body frame [m/s, m/s, rad/s]. Set it before step(). At rest: bollard pull.
         self.velocity = (0.0, 0.0, 0.0)
+        self._curves = [self.curves(t) for t in self.thrusters]
+
+    def curves(self, thruster):
+        """
+        (KT(J), KQ(J)) of a thruster, linear in open_water with the end values
+        held outside the table, or None without open_water: its thrust stays
+        nominal. Subclasses take their curves from elsewhere.
+        """
+        if not thruster.open_water:
+            return None
+        j, kt, kq = zip(*thruster.open_water)
+        return (lambda x: float(np.interp(x, j, kt)), lambda x: float(np.interp(x, j, kq)))
 
     def step(self, thrust_cmd, azimuth_cmd_deg, available=None, dt=0.0):
         """dynamics.ThrusterDynamics.step(), with velocity as it is now. Returns State."""
@@ -102,9 +113,10 @@ class ThrusterDynamicsKtKq(dynamics.ThrusterDynamics):
         speed = (u_r - r * self._y) * np.cos(alpha) + (v_r + r * self._x) * np.sin(alpha)
         thrust, power_kw = nominal.thrust.copy(), nominal.power_kw.copy()
         shaft_speed, torque = np.zeros(len(thrust)), np.zeros(len(thrust))
-        for i, t in enumerate(self.thrusters):
-            if t.open_water:
-                thrust[i], shaft_speed[i], torque[i] = propeller(t, nominal.thrust[i], speed[i])
+        for i, (t, curves) in enumerate(zip(self.thrusters, self._curves)):
+            if curves:
+                thrust[i], shaft_speed[i], torque[i] = propeller(t, nominal.thrust[i], speed[i],
+                                                                 *curves)
                 power_kw[i] = 2 * np.pi * shaft_speed[i] * torque[i] / 1000
 
         fx = thrust * np.cos(alpha)

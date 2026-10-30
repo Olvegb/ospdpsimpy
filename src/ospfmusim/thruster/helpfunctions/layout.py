@@ -62,6 +62,14 @@ class Thruster:
     # diameter. Empty: thrust follows the command, power P_B * r^1.5.
     open_water: tuple[tuple[float, float, float], ...] = ()
     wake_fraction: float = 0.0  # w in Va = (1 - w) * speed through the water (8.12)
+    # Ducted propeller series, only used by the ThrusterDynamicsDucted FMU
+    # (thruster_ducted/helpfunctions/dynamics_ducted.py): KT and KQ of the
+    # Wageningen Ka 4-70 propeller in nozzle 19A, with P/D chosen so the unit
+    # absorbs power_kw at rated_rpm in bollard pull. Needs diameter and
+    # power_kw. None: open_water as in ThrusterDynamicsKtKq.
+    rated_rpm: float | None = None
+    c_t: float = 1.0  # scale on the series KT, fitted to bollard pull or thrust data
+    c_q: float = 1.0  # scale on the series KQ, fitted to logged shaft power
 
     def __post_init__(self):
         if self.kind not in KINDS:
@@ -71,10 +79,13 @@ class Thruster:
         if self.max_reverse_thrust is not None and self.max_reverse_thrust < 0:
             raise ValueError(f"{self.name}: max_reverse_thrust must not be negative, "
                              f"got {self.max_reverse_thrust}")
-        for field in ("diameter", "power_kw", "thrust_time_constant", "max_azimuth_rate"):
+        for field in ("diameter", "power_kw", "thrust_time_constant", "max_azimuth_rate",
+                      "rated_rpm", "c_t", "c_q"):
             value = getattr(self, field)
             if value is not None and not value > 0:
                 raise ValueError(f"{self.name}: {field} must be positive, got {value}")
+        if self.rated_rpm is not None and (self.diameter is None or self.power_kw is None):
+            raise ValueError(f"{self.name}: rated_rpm needs diameter and power_kw")
         if not 0 <= self.wake_fraction < 1:
             raise ValueError(f"{self.name}: wake_fraction must be in [0, 1), "
                              f"got {self.wake_fraction}")
