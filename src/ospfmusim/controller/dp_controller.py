@@ -117,6 +117,167 @@ class DPController(Fmi2Slave):
         self.integral_limit = None               # largest |Ki z| [N, N, Nm]
         # Integral of the body-frame error [m s, m s, rad s]
         self.z = np.zeros(3)
+"""DP controller FMU: a simple PID controller that holds the vessel at a set-point.
+
+The FMU has only ONE parameter, config_path, and reads [controller] and
+[vessel] from the config file when the simulation starts.
+
+  - inputs:   the estimates from the ExtendedKalmanFilter FMU
+              north_hat, east_hat [m], psi_hat [rad], u_hat, v_hat [m/s], r_hat [rad/s]
+  - outputs:  the P, I and D terms of the commanded force in the body frame,
+              tau_<dof>_P, tau_<dof>_I, tau_<dof>_D for dof X, Y [N] and N [Nm],
+              to the ThrustAllocation FMU, which adds them up to tau_X, tau_Y, tau_N
+  - settings: [controller] (set-point, natural frequency, damping ratio, integral limit)
+              and the mass and damping matrices in [vessel]
+
+Control law: PID with velocity feedback (Fossen, Handbook of Marine Craft
+Hydrodynamics and Motion Control, ch. 12). The position error is taken in NED
+and rotated into the body frame, because tau is in the body frame:
+
+    e_ned = [north_hat - north_ref, east_hat - east_ref, wrap(psi_hat - psi_ref)]
+    e     = R(psi_hat)^T e_ned                         (error in the body frame)
+    z    += e * dt                                     (integral of the error)
+    tau   = -Kp e - Ki z - Kd [u_hat, v_hat, r_hat]    (body frame)
+          =  tau_P  + tau_I  + tau_D                   (sent out one by one)
+
+The D term uses the velocity estimates directly, so nothing has to be
+differentiated. The integral removes the steady offset from current, wave
+drift and wind. It stops growing when |Ki z| reaches integral_force_limit
+(anti-windup), for example when the thrusters cannot hold the vessel.
+The integral is in the body frame, which is fine when the heading is held
+(station keeping), but not exact during large heading changes.
+
+The gains are calculated from the diagonals of M and D in [vessel], so each
+degree of freedom behaves like a mass-spring-damper with natural frequency
+wn and damping ratio zeta:
+
+    Kp = M wn^2,   Kd = 2 zeta wn M - D  (at least 0),   Ki = Kp wn / 10
+
+So the gains follow the vessel when the matrices in [vessel] change.
+
+License: MIT (see LICENSE in the repository root)
+Authors: Viljar Simonnes Tveit, Olve Grønås Birkeland (2026)
+"""
+import tomllib
+from pathlib import Path
+
+import numpy as np
+from pythonfmu import Fmi2Causality, Fmi2Slave, Fmi2Variability, Real, String
+
+INPUTS = (
+    "north_hat", "east_hat", "psi_hat",      # estimated position and heading [m, m, rad]
+    "u_hat", "v_hat", "r_hat",               # estimated velocity, body frame [m/s, m/s, rad/s]
+)
+DOFS = ("X", "Y", "N")
+TERMS = ("P", "I", "D")
+# The commanded force, one output per degree of freedom and term, body frame [N, N, Nm].
+TAU_TERMS = tuple(f"tau_{dof}_{term}" for dof in DOFS for term in TERMS)
+OUTPUTS = TAU_TERMS + (
+    "error_north", "error_east",             # position error, NED [m] (for logging)
+    "error_heading_deg",                     # heading error, -180 to 180 [deg] (for logging)
+    "ref_north", "ref_east",                 # set-point now, NED [m] (log)
+    "ref_heading_deg",                       # set-point heading [deg] (log)
+)
+
+# ---------------------------------------------------------------------
+# Four-corner test (hardcoded for now, until we have a reference model)
+# ---------------------------------------------------------------------
+# Turned on with four_corner_test = true in [controller]. Each row is
+# (start time [s], north [m], east [m], heading [deg]). The numbers are
+# offsets from the set-point in [controller], so the box starts there.
+FOUR_CORNER_SETPOINTS = (
+    (0.0, 0.0, 0.0, 0.0),           # 1. hold the start position
+    (50.0, 10.0, 0.0, 0.0),         # 2. surge: 10 m north
+    (250.0, 10.0, 10.0, 0.0),       # 3. sway: 10 m east
+    (450.0, 10.0, 10.0, -45.0),     # 4. yaw: turn to -45 deg
+    (650.0, 0.0, 10.0, -45.0),      # 5. combined: 10 m south at -45 deg
+    (850.0, 0.0, 0.0, 0.0),         # 6. combined: back to start and 0 deg
+)
+# The set-point moves towards each new corner at most this fast,
+# so it ramps instead of jumping (a very simple reference model).
+SETPOINT_SPEED = 0.2                # [m/s], in north and in east
+SETPOINT_YAW_RATE_DEG = 1.0         # [deg/s]
+
+
+def total_tau(fmu):
+    """tau = P + I + D [X, Y, N] from the controller's outputs, as the allocation adds them up."""
+    return np.array([sum(getattr(fmu, f"tau_{dof}_{term}") for term in TERMS) for dof in DOFS])
+
+
+def rotation(psi):
+    """R(psi): rotates a body-frame vector [x, y, n] into NED. R^T rotates NED into body."""
+    c, s = np.cos(psi), np.sin(psi)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def wrap_angle(angle):
+    """Wraps an angle to [-pi, pi), so a heading error of 359 deg becomes -1 deg."""
+    return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
+
+def four_corner_offset(time):
+    """Offset [north, east, psi] of the corner the vessel goes to at a time."""
+    offset = FOUR_CORNER_SETPOINTS[0]
+    for row in FOUR_CORNER_SETPOINTS:
+        if time >= row[0]:
+            offset = row
+    _, north, east, heading_deg = offset
+    return np.array([north, east, np.radians(heading_deg)])
+
+
+def move_towards(reference, target, step_size):
+    """Moves the set-point towards the target, no faster than the limits."""
+    max_change = step_size * np.array([SETPOINT_SPEED, SETPOINT_SPEED,
+                                       np.radians(SETPOINT_YAW_RATE_DEG)])
+    change = target - reference
+    change[2] = wrap_angle(change[2])     # turn the shortest way
+    return reference + np.clip(change, -max_change, max_change)
+
+
+def pid_gains(mass_matrix, damping_matrix, natural_frequency, damping_ratio):
+    """Kp, Ki, Kd (one value per degree of freedom) from the diagonals of M and D."""
+    m = np.diag(np.asarray(mass_matrix, dtype=float))
+    d = np.diag(np.asarray(damping_matrix, dtype=float))
+    wn = np.asarray(natural_frequency, dtype=float)
+    zeta = np.asarray(damping_ratio, dtype=float)
+    kp = m * wn**2
+    kd = np.maximum(2.0 * zeta * wn * m - d, 0.0)   # the vessel's own damping already helps
+    ki = kp * wn / 10.0
+    return kp, ki, kd
+
+
+class DPController(Fmi2Slave):
+
+    author = "Viljar Simonnes Tveit"
+    description = ("Simple DP controller: PID on position and heading, commanded force tau in "
+                   "the body frame")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # PARAMETER: path to the config file.
+        self.config_path = ""
+        self.register_variable(String("config_path", causality=Fmi2Causality.parameter,
+                                      variability=Fmi2Variability.fixed))
+
+        # INPUTS: the estimates from the Kalman filter.
+        for name in INPUTS:
+            setattr(self, name, 0.0)
+            self.register_variable(Real(name, causality=Fmi2Causality.input))
+
+        # OUTPUTS: the P, I and D terms of the commanded force, and the errors for logging.
+        for name in OUTPUTS:
+            setattr(self, name, 0.0)
+            self.register_variable(Real(name, causality=Fmi2Causality.output))
+
+        # CONSTANTS and controller state: set in exit_initialization_mode.
+        self.reference = None                    # [north_ref, east_ref, psi_ref] [m, m, rad]
+        self.start_reference = None              # set-point in [controller]
+        self.four_corner_test = False            # True: four-corner test
+        self.kp = self.ki = self.kd = None       # gains per degree of freedom
+        self.integral_limit = None               # largest |Ki z| [N, N, Nm]
+        # Integral of the body-frame error [m s, m s, rad s]
+        self.z = np.zeros(3)
 
     def exit_initialization_mode(self):
         if not self.config_path:
@@ -126,6 +287,8 @@ class DPController(Fmi2Slave):
         controller = config["controller"]
         self.reference = np.array([float(controller["north_ref"]), float(controller["east_ref"]),
                                    np.radians(float(controller["heading_ref_deg"]))])
+        self.start_reference = self.reference.copy()
+        self.four_corner_test = bool(controller.get("four_corner_test", False))
         self.kp, self.ki, self.kd = pid_gains(config["vessel"]["mass_matrix"],
                                               config["vessel"]["damping_matrix"],
                                               controller["natural_frequency"],
@@ -137,6 +300,11 @@ class DPController(Fmi2Slave):
         self.do_step(0.0, 0.0)
 
     def do_step(self, current_time, step_size):
+        # Four-corner test: the set-point ramps towards the current corner.
+        if self.four_corner_test:
+            target = self.start_reference + four_corner_offset(current_time)
+            self.reference = move_towards(self.reference, target, step_size)
+
         eta = np.array([self.north_hat, self.east_hat, self.psi_hat])
         nu = np.array([self.u_hat, self.v_hat, self.r_hat])
 
@@ -158,4 +326,7 @@ class DPController(Fmi2Slave):
                 setattr(self, f"tau_{dof}_{term}", float(value))
         self.error_north, self.error_east = float(e_ned[0]), float(e_ned[1])
         self.error_heading_deg = float(np.degrees(e_ned[2]))
+        self.ref_north = float(self.reference[0])
+        self.ref_east = float(self.reference[1])
+        self.ref_heading_deg = float(np.degrees(wrap_angle(self.reference[2])))
         return True
