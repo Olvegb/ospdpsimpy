@@ -1,6 +1,6 @@
 """
 Thruster dynamics with open-water propeller curves (KT, KQ), to compare with
-thruster.helpfunctions.dynamics, where the thrust is the lagged command.
+dynamics.py, where the thrust is the lagged command.
 
 ThrusterDynamicsKtKq is dynamics.ThrusterDynamics (thrust lag, azimuth rate
 limits, trips) with one change: for a thruster with open_water in the
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ospfmusim.thruster.helpfunctions import dynamics
+from . import dynamics
 
 RHO = 1025.0  # density of sea water [kg/m^3]
 
