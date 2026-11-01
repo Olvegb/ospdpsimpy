@@ -18,14 +18,13 @@ Authors: William Boland (2026)
 import numpy as np
 import pytest
 
-from ospfmusim.thruster import thrust_allocation, thruster_dynamics
+from ospfmusim.thruster import thrust_allocation, thruster_dynamics, thruster_dynamics_ktkq
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
 from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
+from ospfmusim.thruster.helpfunctions.dynamics_ducted import (KQ_19A, KT_19A,
+                                                              ThrusterDynamicsDucted, _poly)
+from ospfmusim.thruster.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
 from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
-from ospfmusim.thruster_ducted.helpfunctions.dynamics_ducted import (KQ_19A, KT_19A,
-                                                                      ThrusterDynamicsDucted, _poly)
-from ospfmusim.thruster_ktkq import thruster_dynamics_ktkq
-from ospfmusim.thruster_ktkq.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
 
 RATE = 10.0      # [deg/s]
 THRUST = 100e3   # [N]
@@ -185,6 +184,8 @@ max_thrust = 200e3
     fmu.do_step(0.0, DT)
     assert fmu.tau_X == 50e3
     assert fmu.thruster1_thrust_command == 0.0
+
+
 def test_series_matches_ka_4_70_in_nozzle_19a():
     assert _poly(KT_19A, 0.0, 1.0) == pytest.approx(0.526, abs=5e-4)
     assert _poly(KQ_19A, 0.0, 1.0) == pytest.approx(0.044, abs=5e-4)

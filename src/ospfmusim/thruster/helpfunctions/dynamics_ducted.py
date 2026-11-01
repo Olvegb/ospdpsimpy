@@ -1,6 +1,6 @@
 """
 Thruster dynamics with a generalised ducted propeller: the Wageningen Ka 4-70
-propeller in nozzle 19A (Oosterveld 1973), to compare with thruster_ktkq,
+propeller in nozzle 19A (Oosterveld 1973), to compare with dynamics_ktkq.py,
 where the curves are a table in the config.
 
 ThrusterDynamicsDucted is dynamics_ktkq.ThrusterDynamicsKtKq with one change:
@@ -23,7 +23,7 @@ import math
 
 from scipy.optimize import brentq
 
-from ospfmusim.thruster_ktkq.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
+from .dynamics_ktkq import RHO, ThrusterDynamicsKtKq
 
 # Oosterveld polynomial coefficients for Ka 4-70 in nozzle 19A.
 # Keys are (x, y) = (power of P/D, power of J).
@@ -62,17 +62,23 @@ def pitch_ratio(thruster):
 
 
 class ThrusterDynamicsDucted(ThrusterDynamicsKtKq):
-    """ThrusterDynamicsKtKq, with the curves of thrusters with rated_rpm from the Ka 4-70/19A series."""
+    """
+    ThrusterDynamicsKtKq, with the curves of thrusters with rated_rpm from the
+    Ka 4-70/19A series.
+    """
 
     def curves(self, thruster):
         if thruster.rated_rpm is None:
             return super().curves(thruster)
         pd = pitch_ratio(thruster)
         j0 = brentq(lambda j: _poly(KT_19A, j, pd), 0.0, 2.0)  # J where KT = 0
+
         # ponytail: first quadrant only. J is held in [0, J0]: inflow from
         # behind gives the bollard values, beyond J0 no thrust. Reverse thrust
         # uses the same curve (dynamics_ktkq.propeller), fine for azimuths that
         # turn instead; add 4-quadrant data for tunnels or shaft lines.
-        clip = lambda j: min(max(j, 0.0), j0)  # noqa: E731
+        def clip(j):
+            return min(max(j, 0.0), j0)
+
         return (lambda j: thruster.c_t * _poly(KT_19A, clip(j), pd),
                 lambda j: thruster.c_q * _poly(KQ_19A, clip(j), pd))

@@ -1,6 +1,6 @@
 """ThrusterDynamicsKtKq FMU: ThrusterDynamics with the thrust from KT/KQ propeller curves.
 
-The same FMU as thruster/thruster_dynamics.py (the same parameter, inputs
+The same FMU as thruster_dynamics.py (the same parameter, inputs
 and outputs, and the same life cycle), with
 helpfunctions.dynamics_ktkq.ThrusterDynamicsKtKq as the model: thrusters
 with open_water in the config lose thrust with speed through the water,
@@ -17,8 +17,8 @@ import math
 
 from pythonfmu import Fmi2Causality, Real
 
+from ospfmusim.thruster.helpfunctions import dynamics_ktkq
 from ospfmusim.thruster.thruster_dynamics import SLOTS, ThrusterDynamics
-from ospfmusim.thruster_ktkq.helpfunctions import dynamics_ktkq
 
 
 class ThrusterDynamicsKtKq(ThrusterDynamics):

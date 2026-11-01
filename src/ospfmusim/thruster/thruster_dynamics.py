@@ -3,8 +3,9 @@
 The FMU has only ONE parameter, config_path, and reads the thrusters itself
 from the config file when the simulation starts. The dynamics are
 helpfunctions.dynamics.ThrusterDynamics; this file only moves values
-between FMI variables and that code. ThrusterDynamicsKtKq (thruster_ktkq/)
-is this FMU with the thrust from KT/KQ propeller curves instead.
+between FMI variables and that code. ThrusterDynamicsKtKq
+(thruster_dynamics_ktkq.py) is this FMU with the thrust from KT/KQ propeller
+curves instead.
 
 The thrusters are slots, as in thrust_allocation.py: the k-th [[thrusters]]
 entry in config.toml is thruster<k>_... here. Slots without a thruster

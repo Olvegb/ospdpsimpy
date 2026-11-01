@@ -42,8 +42,8 @@ FMUS = {
     "DPController": "controller/dp_controller.py",
     "ThrustAllocation": "thruster/thrust_allocation.py",
     "ThrusterDynamics": "thruster/thruster_dynamics.py",
-    "ThrusterDynamicsKtKq": "thruster_ktkq/thruster_dynamics_ktkq.py",
-    "ThrusterDynamicsDucted": "thruster_ducted/thruster_dynamics_ducted.py",
+    "ThrusterDynamicsKtKq": "thruster/thruster_dynamics_ktkq.py",
+    "ThrusterDynamicsDucted": "thruster/thruster_dynamics_ducted.py",
 }
 
 # Folders that are not copied into the FMUs.

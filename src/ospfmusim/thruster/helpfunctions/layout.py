@@ -56,14 +56,14 @@ class Thruster:
     thrust_time_constant: float | None = None  # first-order lag of the thrust [s]
     max_azimuth_rate: float | None = None  # fastest an azimuth turns [deg/s]
     # Open-water propeller curves, only used by the ThrusterDynamicsKtKq FMU
-    # (thruster_ktkq/helpfunctions/dynamics_ktkq.py): (J, KT, KQ) rows, J
+    # (dynamics_ktkq.py): (J, KT, KQ) rows, J
     # increasing and covering J = 0, interpolated linearly. Two rows give the
     # linear model KT = KT0 - alpha_T1*J of Sørensen (2018) (8.10). Needs
     # diameter. Empty: thrust follows the command, power P_B * r^1.5.
     open_water: tuple[tuple[float, float, float], ...] = ()
     wake_fraction: float = 0.0  # w in Va = (1 - w) * speed through the water (8.12)
     # Ducted propeller series, only used by the ThrusterDynamicsDucted FMU
-    # (thruster_ducted/helpfunctions/dynamics_ducted.py): KT and KQ of the
+    # (dynamics_ducted.py): KT and KQ of the
     # Wageningen Ka 4-70 propeller in nozzle 19A, with P/D chosen so the unit
     # absorbs power_kw at rated_rpm in bollard pull. Needs diameter and
     # power_kw. None: open_water as in ThrusterDynamicsKtKq.
