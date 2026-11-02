@@ -4,7 +4,7 @@ From Python:
 
     from ospfmusim.run import run_simulation
 
-    run_dir = run_simulation("data_examples/GunnerusL35_20201112.mat", "configs/gunnerus.toml",
+    run_dir = run_simulation("data_examples/gunnerus.mat", "configs/gunnerus.toml",
                              "src/ospfmusim/OspSystemStructure.xml", duration=60.0)
 
 From the repo folder, with the conda environment master active:

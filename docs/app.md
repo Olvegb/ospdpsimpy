@@ -37,7 +37,8 @@ FMU to it, so `OspSystemStructure.xml` is not changed. Relative file paths in th
    comma-separated. The toggles **Wind**, **Waves**, **Current** and **Thrust allocation** above the
    groups switch each part off (`enabled` in its section): no wind, a calm sea, no current, or
    no thrust (the vessel drifts; the controller and filter still run). A config without
-   `enabled` gets it, switched on.
+   `enabled` gets it, switched on. The checkbox **pin_test** in the Simulation group holds the vessel
+   still at its initial pose, to read the loads on it (see the **Pin test** tab below).
 3. **Run name** (optional) is added to the folder name.
 4. **Run simulation.** The app writes a copy of the config with your changes, runs
    `python -m ospfmusim.run` with it, and selects the new run in the sidebar. The output of the script is
@@ -62,6 +63,7 @@ in the config file in `configs/`.
 | **Control and thrusters** | Position and heading error, commanded vs delivered force, thrust, azimuth and power per thruster (named from `[[thrusters]]`), utilisation, saturation and turn limit |
 | **Thrusters** | The vessel seen from above (bow up, starboard right). At each thruster a pointed arrow for its thrust on the vessel (the way it pushes, length = thrust), a ring at its `max_thrust`, a dotted outline for the command from the allocation, and red wedges for the directions it may not push in (its `forbidden_zones`, and the DNV-ST-0111 flushing sectors with `[allocation] flushing_sectors = true`, drawn with every thruster working). From the middle the sum of the thrusters (X, Y), delivered and commanded by the controller; all arrows have the same scale. A box gives thrust, angle and power per thruster, the sum with N, the load on each switchboard, and the saturated / turn-limited flags. Beside it thrust, angle (-180 to 180°), power and, with `[[power_sources]]`, the switchboard load in % of usable power (available minus reserve) over time, with a line at the slider time. The load comes from the power the thrusters report; the allocation keeps its own estimate (P_B·r^1.5) under the limit, so with ThrusterDynamicsKtKq the two can differ. A time slider (and ▶ Play) moves through the run. The hull outline is drawn from `[vessel] loa` with the Gunnerus beam/length ratio. Needs an internet connection, like the animated footprint |
 | **Data** | Any signals from any FMUs, with units, in one plot; table and download as CSV of the chosen signals. The units come from the column names (`UNITS` in `data.py`), since the FMUs do not write them |
+| **Pin test** | Only for runs made with `pin_test` on. Mean, std, min and max of the wave drift, first-order wave and wind loads in X, Y and N; the wave drift (tau2) with its running mean and the mean expected from the drift table; and the first-order wave and wind loads over time. The first second is left out, since the waves reach the vessel after two steps. The load from the current is not logged, so it is not shown. See "Pin test" in `docs/vessel_fmu.md` |
 
 **Sidebar**
 

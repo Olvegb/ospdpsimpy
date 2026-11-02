@@ -74,9 +74,9 @@ def gust_components(mean_speed, height, f_min, f_max, n_components, rng):
 
     The frequencies are spread logarithmically, and each one is drawn at random
     inside its band so the gust signal does not repeat itself.
-    n_components = 0 gives no gusts.
+    n_components = 0 or mean_speed = 0 gives no gusts.
     """
-    if n_components == 0:
+    if n_components == 0 or mean_speed == 0:
         return []
     edges = [exp(log(f_min) + (log(f_max) - log(f_min)) * i / n_components)
              for i in range(n_components + 1)]

@@ -48,6 +48,8 @@ SWITCHES = [
 ]
 # Configs without the key get it, switched on, so the toggle can be shown and saved.
 SWITCH_DEFAULTS = {(section, "enabled"): True for _, section, _ in SWITCHES}
+# The pin test is a checkbox in the Simulation group. Configs without the key get it, switched off.
+SWITCH_DEFAULTS[("simulation", "pin_test")] = False
 
 CHOICES = {
     ("waves", "sea_type"): ["regular", "irregular"],
