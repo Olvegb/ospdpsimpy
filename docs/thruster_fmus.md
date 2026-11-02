@@ -17,10 +17,10 @@ flowchart LR
 - **ThrusterDynamics** makes each thruster follow its command the way a real one would: thrust builds
   up with a time lag, and azimuths turn at a limited rate. Its outputs are the total force and moment
   the thrusters put on the vessel, and their power.
-- **ThrusterDynamicsKtKq** (`src/ospfmusim/thruster_ktkq/`) is ThrusterDynamics with the thrust and
+- **ThrusterDynamicsKtKq** (`thruster_dynamics_ktkq.py`) is ThrusterDynamics with the thrust and
   power from KT/KQ propeller curves (§4.1). It replaces ThrusterDynamics as the `dynamics` simulator,
   to compare the two.
-- **ThrusterDynamicsDucted** (`src/ospfmusim/thruster_ducted/`) is ThrusterDynamicsKtKq with the curves
+- **ThrusterDynamicsDucted** (`thruster_dynamics_ducted.py`) is ThrusterDynamicsKtKq with the curves
   from the Ka 4-70 / nozzle 19A ducted propeller series, set by the rating and two calibration
   factors (§4.2). It swaps in the same way.
 
@@ -151,8 +151,8 @@ The thrusters start at rest: zero thrust, azimuths pointing ahead (0°), tunnels
 
 The same FMU, with the thrust and power from open-water propeller curves for every thruster with
 `open_water` in the config (Sørensen 2018, *Marine Cybernetics*, ch. 8). Thrusters without
-`open_water` behave as in ThrusterDynamics. The code is in `src/ospfmusim/thruster_ktkq/`:
-`helpfunctions/dynamics_ktkq.py` subclasses `thruster/helpfunctions/dynamics.py`, so the lag, rate
+`open_water` behave as in ThrusterDynamics. The code is in `src/ospfmusim/thruster/`:
+`helpfunctions/dynamics_ktkq.py` subclasses `helpfunctions/dynamics.py`, so the lag, rate
 limits and trips are shared and only the thrust and power differ.
 
 - The lagged thrust is the nominal thrust Tn. It sets the shaft speed
@@ -184,8 +184,8 @@ app shows both runs.
 ThrusterDynamicsKtKq with KT(J) and KQ(J) from a standard ducted series instead of the `open_water` table,
 for every thruster with `rated_rpm` in the config. The series gives the shape of the curves, and two scale
 factors set their level from vessel data. Without data the factors stay at 1, so the same model works for
-any vessel. The code is in `src/ospfmusim/thruster_ducted/`: `helpfunctions/dynamics_ducted.py`
-subclasses `thruster_ktkq/helpfunctions/dynamics_ktkq.py` and only changes where the curves come from.
+any vessel. The code is in `src/ospfmusim/thruster/`: `helpfunctions/dynamics_ducted.py`
+subclasses `helpfunctions/dynamics_ktkq.py` and only changes where the curves come from.
 Thrusters without `rated_rpm` behave as in ThrusterDynamicsKtKq.
 
 1. **Base curves.** The Oosterveld (1973) polynomials for the Wageningen Ka 4-70 propeller in nozzle 19A give

@@ -69,7 +69,7 @@ class VesselBlock(Fmi2Slave):
                 self.add_real(prefix+name, Fmi2Causality.output)
         for name in VELOCITY:
             self.add_real('lf_'+name, Fmi2Causality.output)
-        for prefix in ('wind_', 'wave_first_', 'wave_drift_'):
+        for prefix in ('wind_', 'wave_first_', 'wave_drift_', 'wave_mean_'):
             for name in LOADS:
                 self.add_real(prefix+name, Fmi2Causality.output)
 
@@ -103,6 +103,8 @@ class VesselBlock(Fmi2Slave):
             raise ValueError('max_internal_step_s must be positive and finite')
         with path.open('rb') as stream:
             shared = tomllib.load(stream)
+        # Pin test: the vessel stays at its initial pose; the loads are still calculated there.
+        self.pin_test = bool(shared['simulation'].get('pin_test', False))
         settings = shared['vessel_fmu']
         if 'mat_file' in settings:
             # Load processed MSS/WAMIT hydrodynamics directly in memory.
@@ -187,7 +189,8 @@ class VesselBlock(Fmi2Slave):
             gust_wind_speed=self.gust_wind_speed, wind_direction_deg=self.wind_direction_deg)
 
     def publish(self):
-        wf = self.wf_model.displacement(self.time, self.state[:6])
+        wf = (np.zeros(6) if self.pin_test
+              else self.wf_model.displacement(self.time, self.state[:6]))
         for labels, values in ((POSE, self.state[:6] + wf),
                                (tuple('lf_' + s for s in POSE), self.state[:6]),
                                (tuple('wf_' + s for s in POSE), wf),
@@ -196,7 +199,8 @@ class VesselBlock(Fmi2Slave):
                 setattr(self, name, float(value))
         wave = self.wave_model.calculate(self.time, self.state[:6])
         for prefix, values in (('wind_', self.wind_load()), ('wave_first_', wave.tau_first_order),
-                               ('wave_drift_', wave.tau_second_order)):
+                               ('wave_drift_', wave.tau_second_order),
+                               ('wave_mean_', wave.tau_mean)):
             for label, value in zip(LOADS, values):
                 setattr(self, prefix+label, float(value))
 
@@ -208,16 +212,17 @@ class VesselBlock(Fmi2Slave):
         if not np.isclose(current_time, self.time, atol=1e-8, rtol=0):
             raise ValueError('Time mismatch; rollback is unsupported')
         self.accept_waves()
-        thrust = np.array([self.X_thrusters, self.Y_thrusters, self.Z_thrusters,
-                           self.K_thrusters, self.M_thrusters, self.N_thrusters])
-        current = np.array([self.current_north, self.current_east, self.current_down])
-        count = int(np.ceil(step_size/self.max_internal_step_s))
-        dt = step_size/count
-        for j in range(count):
-            wave = self.wave_model.calculate(current_time+j*dt, self.state[:6])
-            self.state = self.lf_model.step(self.state, dt, tau_wind=self.wind_load(),
-                                            tau_wave_drift=wave.tau_second_order,
-                                            tau_thruster=thrust, current_ned=current)
+        if not self.pin_test:
+            thrust = np.array([self.X_thrusters, self.Y_thrusters, self.Z_thrusters,
+                               self.K_thrusters, self.M_thrusters, self.N_thrusters])
+            current = np.array([self.current_north, self.current_east, self.current_down])
+            count = int(np.ceil(step_size/self.max_internal_step_s))
+            dt = step_size/count
+            for j in range(count):
+                wave = self.wave_model.calculate(current_time+j*dt, self.state[:6])
+                self.state = self.lf_model.step(self.state, dt, tau_wind=self.wind_load(),
+                                                tau_wave_drift=wave.tau_second_order,
+                                                tau_thruster=thrust, current_ned=current)
         self.time = current_time+step_size
         self.publish()
         return True

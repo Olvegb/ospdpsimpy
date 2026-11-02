@@ -7,7 +7,7 @@
 #
 #   Section                              Read by
 #   -----------------------------------  ---------------------------------
-#   [simulation]                         ospfmusim/run.py
+#   [simulation]                         ospfmusim/run.py, Vessel FMU (pin_test)
 #   [environment] [wind] [current]       Environment FMU
 #   [waves]                              Environment FMU (hs, tp, direction)
 #                                        and Waves FMU (the rest)
@@ -35,6 +35,7 @@
 
 [simulation]
 duration = 1000.0                 # how long the simulation runs [s]
+pin_test = false                  # true: the vessel is held still at its initial pose (origin, heading 0), to read the loads on it. To test another angle, change the wave direction. Thrust has no effect.
 
 
 # =====================================================================
@@ -161,21 +162,21 @@ area_frontal = 82.2923208             # frontal area above water, A_F [m^2]
 
 #   mass_matrix    = rigid-body mass + added mass [kg, kg m, kg m^2]
 #   damping_matrix = linear damping B + Bv [kg/s, kg m/s, kg m^2/s]
-# Copied by hand from data_examples/GunnerusL35_20201112.mat, rows and columns
-# surge, sway, yaw of the 6x6 matrices, at the LF frequency
-# lf_reference_omega_rad_s = 0.2094395 in [vessel_fmu]: MRB + A(w) and
-# B(w) + Bv. The same values the vessel FMU uses. M/D is about 30 s in
-# surge, 9 s in sway and 8 s in yaw.
+# Copied by hand from data_examples/gunnerus.mat, rows and columns
+# surge, sway, yaw of the 6x6 matrices, at the LF frequency 0.2114127 rad/s
+# (the lowest in the file, selected by Wamit.py): MRB + A(w) and
+# B(w) + Bv. The same values the vessel FMU uses. M/D is about 62 s in
+# surge, 123 s in sway and 25 s in yaw.
 
 mass_matrix = [
-    [665784.04,  0.0,         0.0       ],
-    [0.0,        1031111.07, -237053.56 ],
-    [0.0,       -237053.56,   79377120.0],
+    [594629.87,  0.0,         0.0        ],
+    [0.0,        918536.24,  -1706972.34 ],
+    [0.0,       -1707537.01,  65892695.25],
 ]
 damping_matrix = [
-    [22378.42,  0.0,        0.0       ],
-    [0.0,       111575.08, -160.437   ],
-    [0.0,      -160.437,    9756114.0 ],
+    [9628.02,   0.0,        0.0       ],
+    [0.0,       7439.04,   -7.477     ],
+    [0.0,      -7.495,      2666822.91],
 ]
 
 # Vessel FMU (hull/vessel.py): 6-DOF LF + WF hull. The JSON file holds the
@@ -193,7 +194,7 @@ mat_file = "../data_examples/gunnerus.mat"
 # To override the automatic selection, add lf_reference_omega_rad_s = <value>.
 use_mat_viscous_damping = true
 
-# Select newman, sorensen, or newman_absolute at the top of hull/helpfunctions/WaveLoads.py.
+# Select Newman or Sorensen at the top of hull/helpfunctions/WaveLoads.py.
 # The selected LF frequency is a fixed-coefficient approximation, not omega=0.
 
 

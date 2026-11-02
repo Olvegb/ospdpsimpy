@@ -156,6 +156,26 @@ def position_std(vessel):
     return (vessel["north"].var() + vessel["east"].var()) ** 0.5
 
 
+# The waves reach the vessel after two co-simulation steps, so a pin test starts with zero loads.
+# The plots and numbers of a pin test start here [s].
+PIN_TEST_START_S = 1.0
+
+
+def pin_test_loads(vessel):
+    """The numbers of a pin test: one row per load and DOF, for the vessel rows it is given.
+
+    The wave drift rows also have the mean expected from the drift table, sum(T_j A_j^2).
+    """
+    rows = {f"{prefix}{dof}": f"{name} {dof} [{unit(dof)}]"
+            for name, prefix in (("Wave drift", "wave_drift_"), ("First-order wave", "wave_first_"),
+                                 ("Wind", "wind_"))
+            for dof in "XYN"}
+    table = vessel[list(rows)].agg(["mean", "std", "min", "max"]).T
+    table["expected mean"] = pd.Series({f"wave_drift_{dof}": vessel[f"wave_mean_{dof}"].mean()
+                                        for dof in "XYN"})
+    return table.rename(index=rows)
+
+
 def summary(results, config):
     """Key numbers of a run, as {label: (value, unit)}. Missing data is skipped."""
     out = {}
