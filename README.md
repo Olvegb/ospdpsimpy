@@ -18,7 +18,7 @@ Every constant is in one config file in `configs/`; `src/ospfmusim/OspSystemStru
 | `configs/gunnerus.toml` (the default) | RV Gunnerus: wind geometry, and 3-DOF matrices copied from the Gunnerus `.mat` file. |
 | `configs/tests.toml` | Wind geometry and 3-DOF matrices in `[vessel]` are **placeholder values** for an 88 m OSV. The hull hydrodynamics come from the Gunnerus `.mat` file. |
 
-> **The vessel data file is not in the repository.** Both configs read the hydrodynamic data from `data_examples/GunnerusL35_20201112.mat` (`[vessel_fmu] mat_file`). Put the file there before you run. `src/ospfmusim/hull/helpfunctions/example_test_config.json` is **synthetic** test data, used only by `tests/test_vessel_fmu.py`.
+> **The vessel data file is not in the repository.** `configs/gunnerus.toml` reads the hydrodynamic data from `data_examples/gunnerus.mat` and `configs/tests.toml` from `data_examples/GunnerusL35_20201112.mat` (`[vessel_fmu] mat_file`). Put the file there before you run. `src/ospfmusim/hull/helpfunctions/example_test_config.json` is **synthetic** test data, used only by `tests/test_vessel_fmu.py`.
 
 > **Known issue:** with both configs the vessel drifts away after about 25 s, and the run stops at t = 41.5 s with `tau_wind must have shape (6,) and finite values` (the vessel state has become infinite). Runs of 10 s, as below, work.
 

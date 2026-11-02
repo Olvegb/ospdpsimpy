@@ -29,8 +29,8 @@ import numpy as np
 import pytest
 
 from app.build.data import default_config
-from ospfmusim.enviroment.environment import (Environment, GaussMarkov, mean_wind_profile,
-                                              norsok_wind_spectrum)
+from ospfmusim.enviroment.environment import (Environment, GaussMarkov, gust_components,
+                                              mean_wind_profile, norsok_wind_spectrum)
 
 CONFIG = default_config()   # the config the simulation uses (OspSystemStructure.xml)
 DT = 0.1                    # time step [s], as in OspSystemStructure.xml
@@ -193,3 +193,7 @@ def test_saturation_of_the_slowly_varying_wind(environment):
     assert speed.min() >= low - 1e-9 and speed.max() <= high + 1e-9
     # Both limits are reached, so the test really tests the saturation.
     assert speed.min() == pytest.approx(low) and speed.max() == pytest.approx(high)
+
+
+def test_no_mean_wind_gives_no_gusts():
+    assert gust_components(0.0, 10.0, 0.005, 0.5, 20, random.Random(1)) == []

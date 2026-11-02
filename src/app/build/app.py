@@ -138,8 +138,10 @@ R = results.get                                 # short name: R("vessel") -> Dat
 #  Pages
 # ---------------------------------------------------------------------
 
+# Only from the run's own config: the default config says nothing about a run without a copy.
+pin_test = config_path is not None and config.get("simulation", {}).get("pin_test", False)
 tabs = st.tabs(["New run", "Overview", "Vessel", "Environment", "Kalman filter",
-               "Control and thrusters", "Thrusters", "Data"])
+               "Control and thrusters", "Thrusters", "Data"] + (["Pin test"] if pin_test else []))
 
 with tabs[0]:
     editor.render()
@@ -200,6 +202,7 @@ with tabs[1]:
             f"- **Duration:** {config.get('simulation', {}).get('duration', '?')} s\n"
             f"- **Thrusters:** {thrusters}"
             + (", allocation **off** (no thrust)" if off["allocation"] else "")
+            + ("\n- **Pin test:** on, the vessel is held still" if pin_test else "")
         )
 
     vessel = R("vessel")
@@ -440,3 +443,39 @@ with tabs[7]:
         st.dataframe(table, width="stretch", height=300)
         st.download_button("Download as CSV", table.to_csv().encode("utf-8"),
                            file_name="signals.csv", mime="text/csv")
+
+# --- Pin test --------------------------------------------------------
+if pin_test:
+    with tabs[-1]:
+        st.header("Pin test")
+        vessel = R("vessel")
+        if vessel is None:
+            missing("vessel")
+        else:
+            st.caption("The vessel was held still at its initial pose (origin, heading 0), so "
+                       "these are the loads on it there, in the body frame. Of the pose, only the "
+                       "heading matters for the wave drift: to test another angle, change the wave "
+                       "direction. The drift comes from the same table as in a free run, so this "
+                       "checks the model at a fixed heading; it is not a new hydrodynamic "
+                       "measurement. The load from the current is not logged, so it is not shown. "
+                       "In an irregular sea the running mean reaches the expected mean only "
+                       "slowly, so read a value from a regular wave, where the drift is constant.")
+            loads = vessel.loc[data.PIN_TEST_START_S:]
+            st.dataframe(data.pin_test_loads(loads).round(1), width="stretch")
+            st.subheader("Wave drift (second order, tau2)")
+            c1, c2, c3 = st.columns(3)
+            for column, dof, unit in ((c1, "X", "N"), (c2, "Y", "N"), (c3, "N", "Nm")):
+                drift = loads[f"wave_drift_{dof}"]
+                with column:
+                    show(line_plot([("Wave drift", drift),
+                                    ("Running mean", drift.expanding().mean()),
+                                    ("Expected mean", loads[f"wave_mean_{dof}"])],
+                                   f"Wave drift {dof}", f"[{unit}]"))
+            # Apart from the drift: the first-order loads are hundreds of times larger.
+            for title, prefix in (("First-order wave load", "wave_first_"), ("Wind", "wind_")):
+                st.subheader(title)
+                c1, c2, c3 = st.columns(3)
+                for column, dof, unit in ((c1, "X", "N"), (c2, "Y", "N"), (c3, "N", "Nm")):
+                    with column:
+                        show(line_plot([(title, loads[f"{prefix}{dof}"])], f"{title} {dof}",
+                                       f"[{unit}]"))

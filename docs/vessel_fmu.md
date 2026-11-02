@@ -37,6 +37,7 @@ The hull uses `[vessel]` (geometry and `type`), `[environment].air_density`, and
 | `north/east/down/roll/pitch/yaw` | outputs | **Total** LF + WF pose, metres/radians |
 | `lf_north...`, `wf_north...`, `lf_u/v/w/p/q/r` | outputs | LF pose, WF increments, LF-only body velocities |
 | `wind_X/Y/Z/K/M/N`, `wave_first_X/Y/Z/K/M/N`, `wave_drift_X/Y/Z/K/M/N` | outputs | Diagnostic body loads [N] / moments [Nm] |
+| `wave_mean_X/Y/Z/K/M/N` | outputs | Mean drift expected from the drift table, sum(T_j A_j^2). Diagnostic: already included in `wave_drift_*` |
 
 Body frame is forward/starboard/down. NED is north/east/down. Yaw is clockwise positive from north. The model uses the **same 100 wave component port names** as `src/ospfmusim/waves/waves.py`. Propagation directions are converted to radians inside the hull.
 
@@ -45,6 +46,12 @@ Body frame is forward/starboard/down. NED is north/east/down. Yaw is clockwise p
 LF integrates delivered thruster forces + wind + **second-order drift**. WF evaluates harmonic first-order displacement and is added only when publishing total pose. First-order wave forces are diagnostics only: integrating them again in LF would double-count WF motion. `wave_drift_*` already contains the mean drift, so do not add mean drift separately.
 
 Wind is **already applied inside** VesselBlock. Do not separately connect `WindLoads.X/Y/N` to the vessel input. The observer may use `vessel.wind_X/Y/N` for estimated disturbance feedforward. `WindModel.py` intentionally reverses the supplied wind-angle convention to map wind FROM starboard to negative body Y. Confirm Olve's frame and moment sign convention before physical validation.
+
+## Pin test
+
+With `[simulation] pin_test = true` the vessel is held still at its initial pose (origin, heading 0): LF is not integrated and the WF motion is 0, so all six DOFs stay fixed. The wind and wave loads are still calculated at that pose and sent out, and delivered thrust has no effect. The other FMUs run as usual.
+
+The wave drift depends on the heading relative to the waves, not on the position, so to test another angle, change `[waves] direction_deg`. In a regular wave `wave_drift_*` is constant and equal to `wave_mean_*`, so use a regular wave to read a value. In an irregular sea its running mean approaches `wave_mean_*` only slowly: for one default sea (H_s 5 m, T_p 9 s, `GunnerusL35_20201112.mat`) it was 3-11 % off after 1000 s and about 2 % after 10 000 s, and within 0.1 % after 400 000 s. Pinning does not change how the drift is calculated: it comes from the same table as in a free run, so the test checks the model at a fixed heading and is not a new hydrodynamic measurement.
 
 ## Build and checks
 

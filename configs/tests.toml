@@ -7,7 +7,7 @@
 #
 #   Section                              Read by
 #   -----------------------------------  ---------------------------------
-#   [simulation]                         ospfmusim/run.py
+#   [simulation]                         ospfmusim/run.py, Vessel FMU (pin_test)
 #   [environment] [wind] [current]       Environment FMU
 #   [waves]                              Environment FMU (hs, tp, direction)
 #                                        and Waves FMU (the rest)
@@ -35,6 +35,7 @@
 
 [simulation]
 duration = 200.0                # how long the simulation runs [s]
+pin_test = false                # true: the vessel is held still at its initial pose (origin, heading 0), to read the loads on it. To test another angle, change the wave direction. Thrust has no effect.
 
 
 # =====================================================================
