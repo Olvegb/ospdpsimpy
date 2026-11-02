@@ -193,7 +193,7 @@ mat_file = "../data_examples/GunnerusL35_20201112.mat"
 # To override the automatic selection, add lf_reference_omega_rad_s = <value>.
 use_mat_viscous_damping = true
 
-# Select Newman or Sorensen at the top of hull/helpfunctions/WaveLoads.py.
+# Select newman, sorensen, or newman_absolute at the top of hull/helpfunctions/WaveLoads.py.
 # The selected LF frequency is a fixed-coefficient approximation, not omega=0.
 
 

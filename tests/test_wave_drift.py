@@ -76,6 +76,56 @@ class DriftChecks(unittest.TestCase):
             np.testing.assert_allclose(raw.drift(t, (0, 0, 0)),
                                        2*np.array([1, 2.25, 0])*np.cos(.7*t-.2)**2)
 
+    def test_newman_absolute_control_selection(self):
+        with patch("ospfmusim.hull.helpfunctions.WaveLoads.DRIFT_METHOD", "newman_absolute"):
+            self.assertEqual(selected_drift_method(), "newman_absolute")
+            self.assertEqual(WaveLoadModel(Tables([[2.], [-3.], [4.]]), 9.81).drift_method,
+                             "newman_absolute")
+
+    def test_newman_absolute_filtered_signed_double_sum(self):
+        # Independent double-sum reference: sign-preserving, same-sign pairs only.
+        coefficients = np.array([[4., 9., 16.], [-4., -9., -16.], [4., -9., 0.]])
+        m = model(coefficients, 'newman_absolute')
+        for t in (0., 1.3, 5.7, 30.):
+            phases = m.frequencies * t - m.phases
+            expected = np.zeros(3)
+            for dof in range(3):
+                for j in range(3):
+                    for k in range(3):
+                        a, b = coefficients[dof, j], coefficients[dof, k]
+                        if a * b > 0:
+                            expected[dof] += (np.sign(a) * np.sqrt(abs(a*b))
+                                               * m.amplitudes[j] * m.amplitudes[k]
+                                               * np.cos(phases[j] - phases[k]))
+            np.testing.assert_allclose(m.drift(t, (0, 0, 0)), expected, atol=1e-12)
+        # The diagonal/mean terms must retain the original SIGN of T.
+        np.testing.assert_allclose(m.mean_drift(0), coefficients @ m.amplitudes**2)
+
+    def test_newman_absolute_literal_and_single_component(self):
+        single = model([[4.], [-9.], [0.]], method='newman_absolute',
+                       amplitudes=[.5], filtered=True)
+        raw = model([[4.], [-9.], [0.]], method='newman_absolute',
+                    amplitudes=[.5], filtered=False)
+        for t in (0., 1., 5.):
+            phase = .7*t - .2
+            np.testing.assert_allclose(single.drift(t, (0, 0, 0)), [1., -2.25, 0.])
+            np.testing.assert_allclose(raw.drift(t, (0, 0, 0)),
+                                       2*np.array([1., -2.25, 0.])*np.cos(phase)**2)
+
+    def test_newman_absolute_full_six_component_load_vector(self):
+        from ospfmusim.hull.helpfunctions.WaveLoads import ResponseTable, WaveLoads, WaveComponents
+        omega = np.array([.5, 1.5])
+        headings = np.array([0., 2*np.pi/3, 4*np.pi/3])
+        drift = np.array([4., -9., 16.])[:, None, None] * np.ones((3, 2, 3))
+        force_table = ResponseTable(omega, headings, np.zeros((3, 2, 3), complex), kind='rao')
+        drift_table = ResponseTable(omega, headings, drift, kind='drift')
+        w = WaveLoads(force_table, drift_table, drift_method='newman_absolute')
+        w.set_components(WaveComponents([.5], [1.], [0.], [0.]))
+        result = w.calculate(0., np.zeros(6))
+        self.assertEqual(result.tau_second_order.shape, (6,))
+        np.testing.assert_allclose(result.tau_second_order, [1., -2.25, 0., 0., 0., 4.])
+        np.testing.assert_allclose(result.tau_mean, result.tau_second_order)
+
     def test_strict_negative_rejection_and_inactive_slots(self):
         coefficients = [[4, -9], [1, -16], [0, -25]]
         with self.assertRaisesRegex(ValueError, 'nonnegative'):

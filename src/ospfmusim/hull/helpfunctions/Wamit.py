@@ -1,342 +1,811 @@
-"""Load processed MSS/WAMIT hydrodynamic data from a MATLAB vessel structure.
 
-Run this file in VS Code to inspect the original frequencies and table dimensions.
-Use the source frequency nodes when the user-selected count matches; otherwise
-resample within the overlapping *calculated* frequency range. No FMU or JSON
-files are produced by this script.
+"""Wave load calculations adapted from Viljar Simonnes Tveit.
+Source: https://github.com/viljarst/DP_cosim/tree/wave-loads/wave_forces
+Revision: 668b1c4a419ff9cbdc6ca28d348c5c62301d3bab
+
+Upstream license:
+MIT License
+
+Copyright (c) 2026 Viljar Simonnes Tveit
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 License: GPL-3.0-or-later (see LICENSE and NOTICE.md in this folder)
 Authors: Araz, Olve Grønås Birkeland (2026)
 """
-import sys
-from pathlib import Path
+
+import json
+from dataclasses import dataclass
 
 import numpy as np
-from scipy.io import loadmat
-
-try:
-    from ._wamit_motion import checked_matrix, read_response, interpolate_matrices, interpolate
-    from .WaveLoads import ResponseTable, selected_drift_method
-except ImportError:  # VS Code: Run Python File
-    from _wamit_motion import checked_matrix, read_response, interpolate_matrices, interpolate
-    from WaveLoads import ResponseTable, selected_drift_method
 
 
-# --------------- ONLY USER SETTINGS ------------------
-FREQUENCY_COUNT = 100  # None = use all original calculated source frequencies
-# .mat inspected when this file is run (or: python Wamit.py other.mat);
-# the simulation uses [vessel_fmu] mat_file in the config.
-MAT_FILE = Path(__file__).resolve().parents[4] / "data_examples" / "GunnerusL35_20201112.mat"
-# -----------------------------------------------------
+# ---------------- WAVE DRIFT CONTROL: edit here ----------------
+# Options: "newman", "sorensen", "newman_absolute"
+DRIFT_METHOD = "newman_absolute"
 
-# Internal MSS loader defaults; normally no manual input is needed.
-HEADING_STEP_DEG = 10
-FREQUENCY_SPACING = "log"  # Used only when the chosen count differs from source
-LF_REFERENCE_OMEGA = None  # Select lowest calculated frequency automatically
-# Drift formulation is selected separately in WaveLoads.py.
+# Newman (6.97): signed coefficient arithmetic-average approximation.
+# Sorensen (6.99): requires nonnegative active drift coefficients.
+# Newman absolute: signed extension of Eq. (25), sqrt(abs(Tjj)).
+# --------------------------------------------------------------
 
 
-def _frequency_axis(name, values, *, allow_zero=False):
-    """Check that an MSS frequency vector is finite, ordered, and nonempty."""
-    omega = np.asarray(values, dtype=float).ravel()
-    if omega.size < 2:
-        raise ValueError(f"{name}: at least two frequency points are required")
-    minimum_invalid = omega[0] < 0 if allow_zero else omega[0] <= 0
-    if (not np.isfinite(omega).all()
-            or np.any(np.diff(omega) <= 0) or minimum_invalid):
-        expected = "nonnegative" if allow_zero else "positive"
-        raise ValueError(f"{name}: expected increasing {expected} frequencies")
-    return omega
-
-
-def _same_grid(source, target):
-    """Match actual numerical frequency nodes, not just the number of entries."""
-    return (len(source) == len(target)
-            and np.allclose(source, target, rtol=1e-12, atol=1e-12))
-
-
-def _matrix_at(frequencies, matrix, target):
-    """Use stored matrix slices when exact nodes exist; interpolate otherwise."""
-    positions = np.searchsorted(frequencies, target)
-    if (np.all(positions < len(frequencies))
-            and np.allclose(frequencies[positions], target, rtol=1e-12, atol=1e-12)):
-        return matrix[:, :, positions].copy()
-    return interpolate_matrices(frequencies, matrix, target)
-
-
-def _response_at(table, target_omega, target_headings):
-    """Return original complex RAOs unchanged if both axes already match."""
-    if (_same_grid(table.omega, target_omega)
-            and _same_grid(table.heading_deg, target_headings)):
-        return table.values.copy()
-    return interpolate(table, target_omega, target_headings)
-
-
-def _mat_viscous_at(raw_bv, frequencies, omega):
-    """Accept 6x6 constant Bv, or 6x6xN frequency-dependent MSS Bv.
-
-    A four-dimensional MSS array may contain a final vessel-speed axis;
-    checked_matrix selects its first entry (zero-speed convention).
-    """
-    array = np.asarray(raw_bv, dtype=float)
-    if array.shape == (6, 6):
-        return checked_matrix(array, (6, 6), "Bv"), "constant 6x6"
-    if array.ndim == 4:
-        array = array[:, :, :, 0]
-    array = checked_matrix(array, (6, 6, len(frequencies)), "Bv")
-    return _matrix_at(frequencies, array, np.array([omega]))[:, :, 0], (
-        f"frequency-dependent at omega={omega:.9g} rad/s"
-    )
-
-
-def load_mat_vessel(
-    filename=MAT_FILE, *, frequency_count=FREQUENCY_COUNT,
-    heading_step_deg=HEADING_STEP_DEG, frequency_spacing=FREQUENCY_SPACING,
-    lf_reference_omega_rad_s=None, additional_linear_damping_matrix_si=None,
-    drift_method=None, require_simulation_ready=False,
-    use_mat_viscous_damping=False,
-):
-    """Load a supported MSS vessel .mat file and select a validated output grid.
-
-    The *calculated* frequencies come from motionRAO.w, intersected with the
-    force/drift and matrix grids. The MSS matrix-only zero and infinity stand-ins
-    are not counted as calculated wave frequencies.
-    """
-    filename = Path(filename).expanduser().resolve()
-    if not filename.is_file():
-        raise FileNotFoundError(f"MATLAB hydrodynamic file not found: {filename}")
-    raw = loadmat(filename, simplify_cells=True)
-    if "vessel" not in raw:
-        raise ValueError(f"{filename.name} does not contain an MSS 'vessel' structure")
-    v = raw["vessel"]
-
-    frequencies = _frequency_axis("vessel.freqs", v["freqs"], allow_zero=True)
-    headings = np.rad2deg(np.asarray(v["headings"], dtype=float).ravel())
-    if (headings.size < 3 or not np.isfinite(headings).all()
-            or np.any(np.diff(headings) <= 0)
-            or headings[0] < -1e-8 or headings[-1] >= 360 + 1e-8):
-        raise ValueError("Invalid vessel headings: expected increasing radians in [0,2*pi)")
-    if (not isinstance(heading_step_deg, (int, np.integer))
-            or heading_step_deg <= 0 or 360 % heading_step_deg):
-        raise ValueError("heading_step_deg must be a positive integer dividing 360")
-    if frequency_spacing not in ("log", "linear"):
-        raise ValueError("frequency_spacing must be 'log' or 'linear'")
-
-    rigid = checked_matrix(v["MRB"], (6, 6), "MRB")
-    tables = {
-        name: checked_matrix(v[name], (6, 6, len(frequencies)), name)
-        for name in ("A", "B", "C")
+def selected_drift_method(method=None):
+    # Convert the simple choice into the equation identifier used by the model.
+    options = {
+        "newman": "newman_6_97",
+        "sorensen": "sorensen_6_99",
+        "newman_absolute": "newman_absolute",
+        "newman_6_97": "newman_6_97",
+        "sorensen_6_99": "sorensen_6_99",
     }
-    motion = read_response(v, "motionRAO", [1, -1, 1, -1, 1, -1], headings)
-    force = read_response(v, "forceRAO", [1, -1, 1, -1, 1, -1], headings)
-    drift = read_response(v, "driftfrc", [1, -1, -1], headings)
-    for name, table in (("motionRAO", motion), ("forceRAO", force), ("driftfrc", drift)):
-        _frequency_axis(f"{name}.w", table.omega)
+    method = DRIFT_METHOD if method is None else method
+    if method not in options:
+        raise ValueError(
+            "DRIFT_METHOD must be 'newman', 'sorensen', or 'newman_absolute'"
+        )
+    return options[method]
 
-    positive_frequencies = frequencies[frequencies > 0]
-    low = max(positive_frequencies[0], motion.omega[0], force.omega[0], drift.omega[0])
-    high = min(frequencies[-1], motion.omega[-1], force.omega[-1], drift.omega[-1])
-    if high <= low:
-        raise ValueError(f"No overlapping calculated frequency range (low={low}, high={high})")
 
-    # The motion RAO table defines available calculated nodes. Its frequencies
-    # are never inferred from matrix-only limiting entries or from user count.
-    calculated = motion.omega[(motion.omega >= low) & (motion.omega <= high)]
-    if len(calculated) < 2:
-        raise ValueError("Fewer than two motion RAO points in the common frequency range")
-    if frequency_count is None:
-        count = len(calculated)
-    elif isinstance(frequency_count, (int, np.integer)) and frequency_count >= 2:
-        count = int(frequency_count)
-    else:
-        raise ValueError("frequency_count must be an integer >= 2 or None")
+def finite_vector(value, name):
+    a = np.asarray(value, dtype=float)
+    if a.ndim != 1 or not np.all(np.isfinite(a)):
+        raise ValueError(f'{name} must be a finite one-dimensional array')
+    return a.copy()
 
-    if count == len(calculated):
-        omega = calculated.copy()
-        grid_mode = "original calculated frequency nodes (no frequency resampling)"
-    else:
-        grid = np.geomspace if frequency_spacing == "log" else np.linspace
-        omega = grid(calculated[0], calculated[-1], count)
-        grid_mode = f"{frequency_spacing} resampling ({len(calculated)} source -> {count} output)"
-    angles = np.arange(0, 360, heading_step_deg, dtype=float)
-    matrix_shapes = {name: tuple(np.shape(v[name])) for name in
-                     ("MRB", "A", "B", "C", "Bv") if name in v}
-    for name in ("motionRAO", "forceRAO", "driftfrc"):
-        response = v[name]
-        matrix_shapes[f"{name}.amp[0]"] = tuple(np.shape(response["amp"][0]))
-        if "phase" in response:
-            matrix_shapes[f"{name}.phase[0]"] = tuple(np.shape(response["phase"][0]))
 
-    # Original MSS hydro arrays may include (omega=0) and a synthetic
-    # high-frequency stand-in. Report them, but do not count them as real RAOs.
-    matrix_only = frequencies[(frequencies < calculated[0] - 1e-12)
-                              | (frequencies > calculated[-1] + 1e-12)]
-    info = {
-        "matrix_frequency_count": len(frequencies),
-        "matrix_frequency_min_rad_s": float(frequencies[0]),
-        "matrix_frequency_max_rad_s": float(frequencies[-1]),
-        "matrix_only_frequency_values_rad_s": matrix_only.copy(),
-        "motion_frequency_count": len(motion.omega),
-        "force_frequency_count": len(force.omega),
-        "drift_frequency_count": len(drift.omega),
-        "source_calculated_count": len(calculated),
-        "source_calculated_min_rad_s": float(calculated[0]),
-        "source_calculated_max_rad_s": float(calculated[-1]),
-        "common_frequency_min_rad_s": float(low),
-        "common_frequency_max_rad_s": float(high),
-        "output_count": len(omega),
-        "output_min_rad_s": float(omega[0]),
-        "output_max_rad_s": float(omega[-1]),
-        "grid_mode": grid_mode,
-        "input_frequency_ranges_rad_s": {
-            "motionRAO": (float(motion.omega[0]), float(motion.omega[-1])),
-            "forceRAO": (float(force.omega[0]), float(force.omega[-1])),
-            "driftfrc": (float(drift.omega[0]), float(drift.omega[-1])),
-        },
-        "source_heading_count": len(headings),
-        "output_heading_count": len(angles),
-        "matrix_shapes": matrix_shapes,
-        "lf_reference_rad_s": None,
-        "viscous_damping_source": "not selected",
-    }
+@dataclass(frozen=True)
+class WaveComponents:
+    # INPUT: amplitude [m], omega [rad/s], phase and travel direction [rad].
+    amplitude: np.ndarray
+    omega: np.ndarray
+    phase: np.ndarray
+    direction: np.ndarray
 
-    result = {
-        "schema_version": 1,
-        "source": str(filename),
-        "vessel_name": str(v["main"]["name"]),
-        "frequency_grid": omega,
-        "headings_deg": angles,
-        "gravity": float(v["main"]["g"]),
-        "rigid_mass": rigid,
-        "added_mass_by_frequency": _matrix_at(frequencies, tables["A"], omega),
-        "radiation_damping_by_frequency": _matrix_at(frequencies, tables["B"], omega),
-        "restoring_by_frequency": _matrix_at(frequencies, tables["C"], omega),
-        "restoring": tables["C"][:, :, 0],
-        "motion_table": ResponseTable(omega, np.deg2rad(angles),
-                                      _response_at(motion, omega, angles), kind="rao"),
-        "force_table": ResponseTable(omega, np.deg2rad(angles),
-                                     _response_at(force, omega, angles)[[0, 1, 5]], kind="rao"),
-        "drift_table": ResponseTable(omega, np.deg2rad(angles),
-                                     _response_at(drift, omega, angles), kind="drift"),
-        "drift_method": drift_method,
-        "frequency_info": info,
-    }
+    def __post_init__(self):
+        for name in ('amplitude', 'omega', 'phase', 'direction'):
+            a = finite_vector(getattr(self, name), name)
+            a.setflags(write=False)
+            object.__setattr__(self, name, a)
 
-    if all(key in v for key in ("M", "D", "G")):
-        result["added_mass"] = checked_matrix(v["M"], (6, 6), "M") - rigid
-        result["damping"] = checked_matrix(v["D"], (6, 6), "D")
-        result["restoring"] = checked_matrix(v["G"], (6, 6), "G")
-        result["lf_approximation"] = "MSS M/D/G"
-        info["viscous_damping_source"] = "stored MSS M/D/G"
-    else:
-        if use_mat_viscous_damping and additional_linear_damping_matrix_si is not None:
-            raise ValueError("Choose either stored MATLAB Bv or an explicit damping matrix")
-        lf = (float(lf_reference_omega_rad_s)
-              if lf_reference_omega_rad_s is not None else
-              (float(calculated[0]) if use_mat_viscous_damping else None))
-        if lf is not None:
-            if not np.isfinite(lf) or lf < low or lf > high:
-                raise ValueError(f"LF reference {lf:.9g} rad/s outside the calculated "
-                                 f"frequency range [{low:.9g}, {high:.9g}] rad/s")
-            info["lf_reference_rad_s"] = lf
-        if use_mat_viscous_damping:
-            if "Bv" not in v:
-                raise ValueError("MATLAB vessel missing requested Bv viscous damping")
-            viscous, info["viscous_damping_source"] = _mat_viscous_at(
-                v["Bv"], frequencies, lf
+        if len({
+            len(self.amplitude),
+            len(self.omega),
+            len(self.phase),
+            len(self.direction)
+        }) != 1:
+            raise ValueError('The four wave arrays must have equal lengths')
+
+        if np.any(self.amplitude < 0) or np.any(self.omega < 0):
+            raise ValueError('Wave amplitude and frequency must be nonnegative')
+
+        if np.any((self.amplitude > 0) & (self.omega == 0)):
+            raise ValueError('Nonzero wave amplitudes require positive frequency')
+
+
+def amplitude_phase(amplitude, phase, *, phase_unit, amplitude_mode):
+    a = np.asarray(amplitude, dtype=float)
+    p = np.asarray(phase, dtype=float)
+
+    if a.shape != p.shape or not np.all(np.isfinite(a)) or not np.all(np.isfinite(p)):
+        raise ValueError('RAO amplitudes and phases must have equal, finite shapes')
+
+    if phase_unit not in ('rad', 'deg') or amplitude_mode not in ('absolute', 'signed'):
+        raise ValueError('Specify phase_unit rad/deg and amplitude_mode absolute/signed')
+
+    if phase_unit == 'deg':
+        p = np.deg2rad(p)
+
+    return (
+        np.abs(a) if amplitude_mode == 'absolute' else a
+    ) * np.exp(1j * p)
+
+
+class ResponseTable:
+    # Data values: [DOF, wave frequency, wave heading], full 360 degrees.
+
+    def __init__(self, frequencies, headings, values, *, kind):
+        self.frequencies = finite_vector(frequencies, 'frequencies')
+        self.headings = finite_vector(headings, 'headings')
+        self.values = np.asarray(values).copy()
+
+        if kind not in ('rao', 'drift'):
+            raise ValueError('Table kind must be rao or drift')
+
+        self.kind = kind
+
+        if (
+            len(self.frequencies) < 2
+            or self.frequencies[0] <= 0
+            or np.any(np.diff(self.frequencies) <= 0)
+        ):
+            raise ValueError(
+                'Need at least two increasing positive table frequencies'
             )
-        elif additional_linear_damping_matrix_si is not None:
-            viscous = checked_matrix(
-                additional_linear_damping_matrix_si, (6, 6), "viscous damping"
+
+        if (
+            len(self.headings) < 3
+            or self.headings[0] != 0
+            or np.any(np.diff(self.headings) <= 0)
+            or not np.pi < self.headings[-1] < 2 * np.pi
+        ):
+            raise ValueError(
+                'Need full-circle headings starting at 0, without duplicate 2*pi'
             )
-            info["viscous_damping_source"] = "explicit user-supplied matrix"
+
+        if (
+            self.values.ndim != 3
+            or self.values.shape[1:] != (
+                len(self.frequencies),
+                len(self.headings)
+            )
+            or not np.all(np.isfinite(self.values))
+        ):
+            raise ValueError(
+                'Table must have finite shape (DOF, frequency, heading)'
+            )
+
+        if kind == 'drift' and np.iscomplexobj(self.values):
+            raise ValueError('Drift coefficients must be real')
+
+    def at_frequencies(self, omega):
+        # RAOs hold below table, zero above.
+        # Drift tends to zero at omega=0, holds above.
+        w = finite_vector(omega, 'omega')
+
+        if np.any(w < 0):
+            raise ValueError('Frequency must be nonnegative')
+
+        f, v = self.frequencies, self.values
+
+        hi = np.clip(
+            np.searchsorted(f, w, side='right'),
+            1,
+            len(f) - 1
+        )
+        lo = hi - 1
+
+        weight = np.clip(
+            (w - f[lo]) / (f[hi] - f[lo]),
+            0,
+            1
+        )
+
+        out = (
+            v[:, lo, :] * (1 - weight)[None, :, None]
+            + v[:, hi, :] * weight[None, :, None]
+        )
+
+        if self.kind == 'rao':
+            out[:, w > f[-1], :] = 0
         else:
-            viscous = None
-        if lf is not None and viscous is not None:
-            result["added_mass"] = _matrix_at(frequencies, tables["A"], np.array([lf]))[:, :, 0]
-            result["damping"] = _matrix_at(frequencies, tables["B"], np.array([lf]))[:, :, 0] + viscous
-            result["restoring"] = _matrix_at(frequencies, tables["C"], np.array([lf]))[:, :, 0]
-            result["lf_approximation"] = (
-                f"omega={lf:.9g} rad/s + {info['viscous_damping_source']}"
+            below = w < f[0]
+            out[:, below, :] *= (w[below] / f[0])[None, :, None]
+
+        return out
+
+    def at_headings(self, frequency_values, beta):
+        b = finite_vector(beta, 'beta') % (2 * np.pi)
+        v = np.asarray(frequency_values)
+
+        if v.shape != (
+            self.values.shape[0],
+            len(b),
+            len(self.headings)
+        ):
+            raise ValueError(
+                'Frequency cache does not match component headings'
             )
 
-    if drift_method not in (None, "newman_6_97", "sorensen_6_99"):
-        raise ValueError("Unknown wave drift method")
-    if drift_method == "sorensen_6_99" and np.any(result["drift_table"].values < -1e-12):
-        raise ValueError("Signed drift requires newman_6_97")
-    if require_simulation_ready:
-        if "added_mass" not in result:
-            raise ValueError("Missing LF frequency and viscous damping")
-        if drift_method is None:
-            raise ValueError("Missing wave-drift approximation")
-    return result
+        h = self.headings
+        lo = np.searchsorted(h, b, side='right') - 1
+        hi = (lo + 1) % len(h)
+
+        upper = np.where(hi == 0, 2 * np.pi, h[hi])
+        weight = (b - h[lo]) / (upper - h[lo])
+        j = np.arange(len(b))
+
+        return (
+            v[:, j, lo] * (1 - weight)
+            + v[:, j, hi] * weight
+        )
 
 
-def load_vessel(filename=MAT_FILE):
-    """Load a MATLAB vessel and auto-select its lowest REAL LF omega."""
-    return load_mat_vessel(
-        filename, lf_reference_omega_rad_s=LF_REFERENCE_OMEGA,
-        use_mat_viscous_damping=True,
-        drift_method=selected_drift_method(), require_simulation_ready=True,
+def spatial_phase(components, time, eta, gravity):
+    distance = (
+        eta[0] * np.cos(components.direction)
+        + eta[1] * np.sin(components.direction)
+    )
+
+    return (
+        components.omega * time
+        - components.omega**2 / gravity * distance
+        - components.phase
     )
 
 
-def main():
-    """Run this file in VS Code: show exactly what was read and what is used."""
-    data = load_vessel(sys.argv[1] if len(sys.argv) > 1 else MAT_FILE)
-    i = data["frequency_info"]
-    fmt = lambda w: f"{w:.9f} rad/s (T={2*np.pi/w:.5f} s)" if w > 0 else "0 rad/s (T=infinity)"
+def check_pose_time(time, eta):
+    pose = finite_vector(eta, 'eta_lf')
 
-    print("\n========== MSS / WAMIT MATLAB DATA INSPECTION ==========")
-    print("MATLAB file:", data["source"])
-    print("Vessel:", data["vessel_name"])
-    print("Matrix table frequency axis:")
-    print(f"  N = {i['matrix_frequency_count']}, from "
-          f"{fmt(i['matrix_frequency_min_rad_s'])} to "
-          f"{fmt(i['matrix_frequency_max_rad_s'])}")
-    print("Motion / force / drift RAO frequency points:",
-          i["motion_frequency_count"], "/", i["force_frequency_count"],
-          "/", i["drift_frequency_count"])
-    for kind, (w_min, w_max) in i["input_frequency_ranges_rad_s"].items():
-        print(f"  {kind:10s} original range: {fmt(w_min)} to {fmt(w_max)}")
-    print(f"Common usable source range: {fmt(i['common_frequency_min_rad_s'])}"
-          f" to {fmt(i['common_frequency_max_rad_s'])}")
-    print(f"CALCULATED wave range: {fmt(i['source_calculated_min_rad_s'])}"
-          f" to {fmt(i['source_calculated_max_rad_s'])}")
-    if len(i["matrix_only_frequency_values_rad_s"]):
-        print("Extra matrix-only frequency entries (not counted as wave RAOs):",
-              ", ".join(fmt(w) for w in i["matrix_only_frequency_values_rad_s"]))
-        print("  NOTE: zero/infinity limiting values may be approximations; "
-              "check WAMIT provenance.")
-    print(f"Chosen output: {i['output_count']} frequencies, "
-          f"{fmt(i['output_min_rad_s'])} to {fmt(i['output_max_rad_s'])}")
-    print("Grid strategy:", i["grid_mode"])
-    print(f"Headings: source {i['source_heading_count']}, "
-          f"output {i['output_heading_count']} at {HEADING_STEP_DEG} degree steps")
-    print("Original MATLAB field dimensions:")
-    for name, shape in i["matrix_shapes"].items():
-        print(f"  {name:10s}: {shape}")
-    print("LF reference:", fmt(i["lf_reference_rad_s"]) if i["lf_reference_rad_s"] is not None else "not selected")
-    print("LF viscous damping:", i["viscous_damping_source"])
+    if pose.shape != (6,) or not np.isfinite(time):
+        raise ValueError('Need finite time and six LF pose values')
 
-    matrices = {
-        "MRB (rigid mass)": data["rigid_mass"],
-        "A (added mass)": data["added_mass_by_frequency"],
-        "B (radiation damping)": data["radiation_damping_by_frequency"],
-        "C (restoring)": data["restoring_by_frequency"],
-        "LF added mass": data["added_mass"],
-        "LF damping": data["damping"],
-        "LF restoring": data["restoring"],
-        "Motion RAOs": data["motion_table"].values,
-        "Force RAOs": data["force_table"].values,
-        "Wave drift": data["drift_table"].values,
-    }
-    for name, values in matrices.items():
-        numbers = np.abs(values) if np.iscomplexobj(values) else values
-        print(f"[OK] {name:23} shape={str(values.shape):16} "
-              f"min={numbers.min():.4g} max={numbers.max():.4g}")
-    print("\nAll matrices loaded and checked. No simulation or JSON created.")
+    return pose
 
 
-if __name__ == "__main__":
-    main()
+@dataclass(frozen=True)
+class WaveLoadResult:
+    # OUTPUT: six body loads [X,Y,Z,K,M,N]; only X, Y, N are modelled.
+    tau_first_order: np.ndarray   # Diagnostic first-order excitation (Force RAOs).
+    tau_second_order: np.ndarray  # Mean + slowly varying drift -> LF.py (once).
+    tau_mean: np.ndarray          # Diagnostic, already included in tau_second_order.
+
+
+# --- Viljar: wave_forces/vessel_data.py ---
+DOFS = ("surge", "sway", "yaw")
+
+
+def interpolate_frequency(x_table, table, x_new, left, right):
+    x_new = np.asarray(x_new, dtype=float)
+    nf = len(x_table)
+
+    i = np.clip(
+        np.searchsorted(x_table, x_new) - 1,
+        0,
+        nf - 2
+    )
+
+    w = (
+        (x_new - x_table[i])
+        / (x_table[i + 1] - x_table[i])
+    )
+
+    out = (
+        table[:, i, :] * (1.0 - w)[None, :, None]
+        + table[:, i + 1, :] * w[None, :, None]
+    )
+
+    below = x_new < x_table[0]
+    above = x_new > x_table[-1]
+
+    for mask, rule, edge in (
+        (below, left, 0),
+        (above, right, -1)
+    ):
+        if mask.any():
+            out[:, mask, :] = (
+                0.0 if rule == "zero" else table[:, [edge], :]
+            )
+
+    return out
+
+
+class VesselData:
+
+    def __init__(
+        self,
+        data_file,
+        speed_index,
+        force_rao_rows,
+        drift_rows,
+        rao_amplitude
+    ):
+        if rao_amplitude not in ("absolute", "signed"):
+            raise ValueError(
+                "rao_amplitude must be 'absolute' or 'signed', "
+                f"got '{rao_amplitude}'"
+            )
+
+        with open(data_file, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+
+        freqs = np.asarray(raw["freqs"], dtype=float)
+        headings = (
+            np.asarray(raw["headings"], dtype=float)
+            % (2.0 * np.pi)
+        )
+
+        order = np.argsort(headings)
+
+        if np.any(np.diff(freqs) <= 0):
+            raise ValueError(
+                f"{data_file}: the frequencies must be increasing"
+            )
+
+        # Older JSON/ShipX loading path;
+        # Gunnerus uses in-memory ResponseTables.
+        rao_rows = [force_rao_rows[dof] for dof in DOFS]
+        drift_row_list = [drift_rows[dof] for dof in DOFS]
+
+        amp = np.asarray(
+            raw["forceRAO"]["amp"],
+            dtype=float
+        )[rao_rows, :, :, speed_index]
+
+        phase_deg = np.asarray(
+            raw["forceRAO"]["phase"],
+            dtype=float
+        )
+        phase = np.deg2rad(
+            phase_deg
+        )[rao_rows, :, :, speed_index]
+
+        drift = np.asarray(
+            raw["driftfrc"]["amp"],
+            dtype=float
+        )[drift_row_list, :, :, speed_index]
+
+        if rao_amplitude == "absolute":
+            amp = np.abs(amp)
+
+        self.freqs = freqs
+        self.headings = headings[order]
+        self.rao = (
+            amp * np.exp(1j * phase)
+        )[:, :, order]
+        self.drift = drift[:, :, order]
+
+    def tables_at(self, frequencies):
+        rao = interpolate_frequency(
+            self.freqs,
+            self.rao,
+            frequencies,
+            left="hold",
+            right="zero"
+        )
+
+        # Drift tends to zero for very long waves.
+        f0 = np.concatenate(([0.0], self.freqs))
+        d0 = np.concatenate(
+            (np.zeros_like(self.drift[:, :1, :]), self.drift),
+            axis=1
+        )
+
+        drift = interpolate_frequency(
+            f0,
+            d0,
+            frequencies,
+            left="hold",
+            right="hold"
+        )
+
+        return rao, drift
+
+    def heading_weights(self, beta):
+        h = self.headings
+        nh = len(h)
+
+        beta = (
+            (np.asarray(beta, dtype=float) - h[0])
+            % (2.0 * np.pi)
+            + h[0]
+        )
+
+        h_ext = np.append(h, h[0] + 2.0 * np.pi)
+
+        lo = np.clip(
+            np.searchsorted(h_ext, beta, side="right") - 1,
+            0,
+            nh - 1
+        )
+
+        w = (
+            (beta - h_ext[lo])
+            / (h_ext[lo + 1] - h_ext[lo])
+        )
+
+        hi = (lo + 1) % nh
+        return lo, hi, w
+
+
+# --- Viljar: wave_forces/model.py ---
+class WaveLoadModel:
+    # Calculate first-order wave excitation and second-order drift
+    # in surge, sway, yaw.
+
+    def __init__(
+        self,
+        vessel,
+        gravity,
+        *,
+        drift_method=None,
+        remove_sum_frequency=True
+    ):
+        self.drift_method = selected_drift_method(drift_method)
+        self.remove_sum_frequency = bool(remove_sum_frequency)
+        self.vessel = vessel
+        self.gravity = gravity
+        self.frequencies = None
+        self.set_waves([], [], [], [])
+
+    def set_waves(
+        self,
+        amplitudes,
+        frequencies,
+        phases,
+        directions
+    ):
+        # INPUT: wave amplitude [m], frequency [rad/s],
+        # phase [rad], direction TO [rad].
+        frequencies = np.asarray(frequencies, dtype=float)
+
+        if (
+            self.frequencies is None
+            or not np.array_equal(frequencies, self.frequencies)
+        ):
+            self.frequencies = frequencies
+            self._rao, self._drift = self.vessel.tables_at(frequencies)
+            self._k = frequencies**2 / self.gravity
+            self._idx = np.arange(len(frequencies))
+
+        self.amplitudes = np.asarray(amplitudes, dtype=float)
+        self.phases = np.asarray(phases, dtype=float)
+        self.directions = np.asarray(directions, dtype=float)
+
+    def _interpolate_heading(self, table, beta):
+        lo, hi, w = self.vessel.heading_weights(beta)
+        j = self._idx
+
+        return (
+            table[:, j, lo] * (1.0 - w)
+            + table[:, j, hi] * w
+        )
+
+    def first_order(self, t, eta):
+        # FORMULA: tau_1 = Re{conj(H_force) * exp(i*phase)} @ amplitudes.
+        if len(self.amplitudes) == 0:
+            return np.zeros(3)
+
+        north, east, psi = eta
+
+        H = self._interpolate_heading(
+            self._rao,
+            self.directions - psi
+        )
+
+        arg = (
+            self.frequencies * t
+            - self._k * (
+                north * np.cos(self.directions)
+                + east * np.sin(self.directions)
+            )
+            - self.phases
+        )
+
+        return (
+            np.conj(H) * np.exp(1j * arg)
+        ).real @ self.amplitudes
+
+    def drift(self, t, eta):
+        # INPUT: Gunnerus drift coefficients T
+        # and current wave components.
+        if len(self.amplitudes) == 0:
+            return np.zeros(3)
+
+        psi = eta[2]
+
+        T = self._interpolate_heading(
+            self._drift,
+            self.directions - psi
+        )
+
+        e = self.amplitudes * np.exp(
+            1j * (self.frequencies * t - self.phases)
+        )
+
+        # ----------------------------------------------------
+        # METHOD 1: NEWMAN (6.97)
+        # ----------------------------------------------------
+        # Accepts signed Gunnerus drift coefficients.
+        if self.drift_method == "newman_6_97":
+            return (
+                (T * e).sum(axis=1)
+                * np.conj(e.sum())
+            ).real
+
+        # ----------------------------------------------------
+        # METHOD 2: NEWMAN ABSOLUTE
+        # ----------------------------------------------------
+        # Signed absolute-value extension of Eq. (25).
+        #
+        # sqrt(abs(Tjj)) preserves coefficient magnitudes.
+        # Positive and negative contributions are summed
+        # separately.
+        #
+        # For a uniform sign, this reproduces the signed
+        # absolute-value version of Eq. (25).
+        #
+        # When coefficients have mixed signs, cross-sign
+        # interactions are omitted, since a single sign(Tjj)
+        # outside the summation is undefined.
+        #
+        # The signed mean drift is preserved:
+        # mean = sum(Aj**2 * Tjj).
+
+        if self.drift_method == "newman_absolute":
+
+            root_abs_T = np.sqrt(np.abs(T))
+
+            z_positive = np.sum(
+                np.where(T >= 0, root_abs_T, 0.0)
+                * e[None, :],
+                axis=1
+            )
+
+            z_negative = np.sum(
+                np.where(T < 0, root_abs_T, 0.0)
+                * e[None, :],
+                axis=1
+            )
+
+            if self.remove_sum_frequency:
+                # Mean + difference-frequency drift.
+                return (
+                    np.abs(z_positive)**2
+                    - np.abs(z_negative)**2
+                )
+
+            # Literal Eq. (25) for a uniform sign.
+            return 2.0 * (
+                np.real(z_positive)**2
+                - np.real(z_negative)**2
+            )
+
+        # ----------------------------------------------------
+        # METHOD 3: SØRENSEN (6.99)
+        # ----------------------------------------------------
+        # Requires nonnegative active drift coefficients.
+        active = self.amplitudes > 0
+        T_active = T[:, active]
+
+        tolerance = (
+            1e-12 * max(
+                1.0,
+                float(np.max(np.abs(T_active), initial=0))
+            )
+        )
+
+        if np.any(T_active < -tolerance):
+            raise ValueError(
+                "Sørensen Eq. 6.99 requires nonnegative "
+                "wave-drift coefficients for every active "
+                "component. This vessel has negative "
+                "coefficients. Use drift_method='newman_6_97' "
+                "for signed Tjj or provide a physically "
+                "validated signed-QTF approximation."
+            )
+
+        nonnegative_T = np.maximum(
+            np.where(active[None, :], T, 0.0),
+            0.0
+        )
+
+        z = np.sum(
+            np.sqrt(nonnegative_T) * e[None, :],
+            axis=1
+        )
+
+        if self.remove_sum_frequency:
+            # Mean + difference-frequency terms.
+            return np.abs(z)**2
+
+        # Literal Sørensen 6.99.
+        return 2.0 * np.real(z)**2
+
+    def mean_drift(self, psi):
+        # Mean = T @ amplitude^2.
+        # Diagnostic only; do not add to LF twice.
+        if len(self.amplitudes) == 0:
+            return np.zeros(3)
+
+        T = self._interpolate_heading(
+            self._drift,
+            self.directions - psi
+        )
+
+        return T @ self.amplitudes**2
+
+    def loads(self, t, eta):
+        return (
+            self.first_order(t, eta),
+            self.drift(t, eta)
+        )
+
+
+def build_model(p):
+    vessel = VesselData(
+        p["vessel_data_file"],
+        int(p["speed_index"]),
+        force_rao_rows={
+            "surge": int(p["force_rao_row_surge"]),
+            "sway": int(p["force_rao_row_sway"]),
+            "yaw": int(p["force_rao_row_yaw"])
+        },
+        drift_rows={
+            "surge": int(p["drift_row_surge"]),
+            "sway": int(p["drift_row_sway"]),
+            "yaw": int(p["drift_row_yaw"])
+        },
+        rao_amplitude=p["rao_amplitude"],
+    )
+
+    return WaveLoadModel(
+        vessel,
+        float(p["gravity"]),
+        drift_method=p.get("drift_method"),
+        remove_sum_frequency=p.get("remove_sum_frequency", True),
+    )
+
+
+class _ResponseTableVessel:
+
+    def __init__(self, force_table, drift_table):
+        self.force_table = force_table
+        self.drift_table = drift_table
+        self.headings = force_table.headings
+
+        if not np.array_equal(
+            self.headings,
+            drift_table.headings
+        ):
+            raise ValueError(
+                'Force and drift tables must share a heading grid'
+            )
+
+    def tables_at(self, frequencies):
+        return (
+            self.force_table.at_frequencies(frequencies),
+            self.drift_table.at_frequencies(frequencies)
+        )
+
+    heading_weights = VesselData.heading_weights
+
+
+class WaveLoads:
+    # Adapter between original Viljar wave model and hull/vessel.py.
+
+    def __init__(
+        self,
+        force_table,
+        drift_table,
+        *,
+        gravity=9.81,
+        drift_method=None,
+        remove_sum_frequency=True
+    ):
+        # INPUT from Wamit.py:
+        # result["force_table"] -> X,Y,N Force RAOs.
+        # result["drift_table"] -> X,Y,N drift coefficients.
+
+        if (
+            force_table.kind != 'rao'
+            or drift_table.kind != 'drift'
+            or force_table.values.shape[0] != 3
+            or drift_table.values.shape[0] != 3
+        ):
+            raise ValueError(
+                'Supply X,Y,N force-RAO and real drift tables'
+            )
+
+        self.force_table = force_table
+        self.drift_table = drift_table
+
+        self._initialize(
+            _ResponseTableVessel(force_table, drift_table),
+            gravity,
+            drift_method,
+            remove_sum_frequency
+        )
+
+    def _initialize(
+        self,
+        vessel,
+        gravity,
+        drift_method,
+        remove_sum_frequency
+    ):
+        if not np.isfinite(gravity) or gravity <= 0:
+            raise ValueError('gravity must be positive')
+
+        self.gravity = gravity
+
+        self.model = WaveLoadModel(
+            vessel,
+            gravity,
+            drift_method=drift_method,
+            remove_sum_frequency=remove_sum_frequency,
+        )
+
+        self.set_components(
+            WaveComponents([], [], [], [])
+        )
+
+    # @classmethod
+    # def from_shipx(cls, path, *, phase_unit, amplitude_mode,
+    #                gravity=9.81, drift_method=None,
+    #                remove_sum_frequency=True):
+    #     if phase_unit != 'deg':
+    #         raise ValueError(
+    #             "Viljar's vessel loader requires phase_unit='deg'"
+    #         )
+    #     raw = json.loads(Path(path).read_text())
+    #     if not np.isclose(
+    #         np.asarray(raw['velocities'])[0], 0
+    #     ):
+    #         raise ValueError(
+    #             'This implementation requires zero-speed data in entry 0'
+    #         )
+    #     vessel = VesselData(
+    #         str(path), 0,
+    #         {'surge': 0, 'sway': 1, 'yaw': 5},
+    #         {'surge': 0, 'sway': 1, 'yaw': 2},
+    #         amplitude_mode
+    #     )
+    #     obj = cls.__new__(cls)
+    #     obj._initialize(
+    #         vessel, gravity, drift_method, remove_sum_frequency
+    #     )
+    #     return obj
+
+    def set_components(self, components):
+        # INPUT via hull/vessel.py:
+        # WaveComponents(amplitude, omega, phase, direction).
+        if not isinstance(components, WaveComponents):
+            raise TypeError('Expected WaveComponents')
+
+        self.components = components
+
+        self.model.set_waves(
+            components.amplitude,
+            components.omega,
+            components.phase,
+            components.direction
+        )
+
+    def calculate(self, time, eta_lf):
+        # INPUT: simulation time [s] and six-DOF LF pose.
+        eta = check_pose_time(time, eta_lf)
+
+        first, drift = self.model.loads(
+            time,
+            (eta[0], eta[1], eta[5])
+        )
+
+        mean = self.model.mean_drift(eta[5])
+
+        outputs = []
+
+        for value in (first, drift, mean):
+            load = np.zeros(6)
+
+            # Map X, Y, N to six-DOF force/moment vector.
+            load[[0, 1, 5]] = value
+
+            if not np.all(np.isfinite(load)):
+                raise ValueError(
+                    'Wave calculation produced nonfinite loads'
+                )
+
+            outputs.append(load)
+
+        # OUTPUT:
+        # tau_first_order -> diagnostic, not applied.
+        # tau_second_order -> LF model, once.
+        # tau_mean -> diagnostic, already included.
+        return WaveLoadResult(*outputs)
