@@ -26,7 +26,7 @@ except ImportError:  # VS Code: Run Python File
 FREQUENCY_COUNT = 100  # None = use all original calculated source frequencies
 # .mat inspected when this file is run (or: python Wamit.py other.mat);
 # the simulation uses [vessel_fmu] mat_file in the config.
-MAT_FILE = Path(__file__).resolve().parents[4] / "data_examples" / "GunnerusL35_20201112.mat"
+MAT_FILE = Path(__file__).resolve().parents[4] / "data_examples" / "gunnerus.mat"
 # -----------------------------------------------------
 
 # Internal MSS loader defaults; normally no manual input is needed.
@@ -260,7 +260,7 @@ def load_mat_vessel(
                 f"omega={lf:.9g} rad/s + {info['viscous_damping_source']}"
             )
 
-    if drift_method not in (None, "newman_6_97", "sorensen_6_99"):
+    if drift_method not in (None, "newman_6_97", "sorensen_6_99", "newman_absolute"):
         raise ValueError("Unknown wave drift method")
     if drift_method == "sorensen_6_99" and np.any(result["drift_table"].values < -1e-12):
         raise ValueError("Signed drift requires newman_6_97")
@@ -335,6 +335,25 @@ def main():
         numbers = np.abs(values) if np.iscomplexobj(values) else values
         print(f"[OK] {name:23} shape={str(values.shape):16} "
               f"min={numbers.min():.4g} max={numbers.max():.4g}")
+    # Inspection-only summary: actual keys consumed by hull/vessel.py.
+    print("\n========== WAMIT -> VESSEL INPUT / OUTPUT ROUTING ==========")
+    routes = (
+        ("rigid_mass", "LF.py: rigid-body mass"),
+        ("added_mass", "LF.py: added mass (6x6)"),
+        ("damping", "LF.py: damping (6x6)"),
+        ("restoring", "LF.py: restoring (6x6)"),
+        ("motion_table", "WF.py: motion RAOs, all 6 DOFs"),
+        ("force_table", "WaveLoads.py: first-order X,Y,N (diagnostic)"),
+        ("drift_table", "WaveLoads.py: drift coefficients X,Y,N"),
+    )
+    for key, destination in routes:
+        value = data[key]
+        shape = np.shape(value.values if isinstance(value, ResponseTable) else value)
+        print(f"  {key:18s} {str(shape):14s} -> {destination}")
+    print("  Drift method:", data["drift_method"])
+    print("  Waves FMU -> amplitudes, frequencies, phases, directions -> WaveLoads/WF")
+    print("  WaveLoads -> tau_second_order [X,Y,0,0,0,N] -> LF.py")
+    print("  Load units: [N, N, N, Nm, Nm, Nm]")
     print("\nAll matrices loaded and checked. No simulation or JSON created.")
 
 
