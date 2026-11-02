@@ -5,12 +5,14 @@
 2. ThrustAllocator + ThrusterDynamics, a Gunnerus-like layout without thrust
    lag, starting at rest with an astern command: the force the dynamics give
    must be the one the allocator says it commands, every step.
-3. Open-water curves (ThrusterDynamicsKtKq): an azimuth at bollard pull
-   gives the commanded thrust, and loses thrust when it moves through the
-   water. The two FMUs take the same inputs; only the KT/KQ one loses thrust.
+3. Open-water curves (propeller_curves = "open_water"): an azimuth at bollard
+   pull gives the commanded thrust, and loses thrust when it moves through the
+   water. With the same inputs and "none" in the config, it doesn't.
 4. ThrustAllocation with enabled = false in [allocation]: every thrust command is 0.
-5. Ducted series (ThrusterDynamicsDucted): the Ka 4-70/19A polynomials match
-   the series, and a unit at its rated rpm in bollard pull draws its rated power.
+5. Ducted series (propeller_curves = "ducted_series"): the Ka 4-70/19A polynomials
+   match the series, and a unit at its rated rpm in bollard pull draws its rated power.
+6. propeller_curves chooses the curves, a thruster without the data falls back,
+   and an unknown value is an error.
 
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland (2026)
@@ -18,13 +20,11 @@ Authors: William Boland (2026)
 import numpy as np
 import pytest
 
-from ospfmusim.thruster import thrust_allocation, thruster_dynamics, thruster_dynamics_ktkq
+from ospfmusim.thruster import thrust_allocation, thruster_dynamics
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
-from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
-from ospfmusim.thruster.helpfunctions.dynamics_ducted import (KQ_19A, KT_19A,
-                                                              ThrusterDynamicsDucted, _poly)
-from ospfmusim.thruster.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
-from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
+from ospfmusim.thruster.helpfunctions.dynamics import (KQ_19A, KT_19A, RHO, ThrusterDynamics,
+                                                       _poly)
+from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster, load_layout
 
 RATE = 10.0      # [deg/s]
 THRUST = 100e3   # [N]
@@ -111,8 +111,8 @@ D = 2.0
 
 
 def propeller_azimuth():
-    return ThrusterDynamicsKtKq(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=D,
-                                                 open_water=OPEN_WATER),)))
+    return ThrusterDynamics(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=D,
+                                             open_water=OPEN_WATER),)))
 
 
 def test_bollard_pull_gives_the_commanded_thrust():
@@ -134,10 +134,15 @@ def test_speed_through_the_water_loses_thrust():
     assert state.thrust[0] == pytest.approx(RHO * D**4 * (0.36 - 0.32 * ja) * n**2)
 
 
-def test_only_the_ktkq_fmu_loses_thrust_with_speed(tmp_path):
-    """The same config and inputs in both FMUs, as when one replaces the other."""
-    config = tmp_path / "config.toml"
-    config.write_text(f"""
+def test_only_propeller_curves_lose_thrust_with_speed(tmp_path):
+    """The same inputs in the FMU, with only propeller_curves in the config changed."""
+    fmus = {}
+    for source in ("none", "open_water"):
+        config = tmp_path / f"{source}.toml"
+        config.write_text(f"""
+[allocation]
+propeller_curves = "{source}"
+
 [[thrusters]]
 name = "AZ"
 kind = "azimuth"
@@ -147,9 +152,7 @@ max_thrust = 200e3
 diameter = {D}
 open_water = {[list(row) for row in OPEN_WATER]}
 """)
-    fmus = {}
-    for cls in (thruster_dynamics.ThrusterDynamics, thruster_dynamics_ktkq.ThrusterDynamicsKtKq):
-        fmu = fmus[cls] = cls(instance_name="dynamics")
+        fmu = fmus[source] = thruster_dynamics.ThrusterDynamics(instance_name="dynamics")
         fmu.config_path = str(config)
         fmu.thruster1_thrust_command = THRUST
         fmu.u = 2.0
@@ -157,11 +160,11 @@ open_water = {[list(row) for row in OPEN_WATER]}
     model = propeller_azimuth()
     model.velocity = (2.0, 0.0, 0.0)
     expected = model.step([THRUST], [0.0])
-    old, ktkq = fmus.values()
-    assert old.thruster1_thrust == pytest.approx(THRUST)
-    assert ktkq.thruster1_thrust == pytest.approx(expected.thrust[0])
-    assert ktkq.thruster1_shaft_speed == pytest.approx(expected.shaft_speed[0])
-    assert ktkq.X == pytest.approx(expected.thrust[0])
+    assert fmus["none"].thruster1_thrust == pytest.approx(THRUST)
+    assert fmus["none"].thruster1_shaft_speed == 0.0
+    assert fmus["open_water"].thruster1_thrust == pytest.approx(expected.thrust[0])
+    assert fmus["open_water"].thruster1_shaft_speed == pytest.approx(expected.shaft_speed[0])
+    assert fmus["open_water"].X == pytest.approx(expected.thrust[0])
 
 
 def test_switched_off_allocation_gives_no_thrust(tmp_path):
@@ -193,8 +196,9 @@ def test_series_matches_ka_4_70_in_nozzle_19a():
 
 def ducted_azimuth():
     """A Gunnerus-like ducted azimuth: 1.9 m, 500 kW at 198 rpm."""
-    return ThrusterDynamicsDucted(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=1.9,
-                                                   power_kw=500.0, rated_rpm=198.0),)))
+    return ThrusterDynamics(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=1.9,
+                                             power_kw=500.0, rated_rpm=198.0),),
+                                   propeller_curves="ducted_series"))
 
 
 def test_ducted_draws_rated_power_at_rated_rpm():
@@ -211,3 +215,37 @@ def test_ducted_loses_thrust_with_speed():
     model = ducted_azimuth()
     model.velocity = (2.0, 0.0, 0.0)
     assert model.step([THRUST], [0.0]).thrust[0] < THRUST
+
+
+@pytest.mark.parametrize("source, data, kt0", [
+    ("none", {"open_water": OPEN_WATER, "rated_rpm": 198.0}, None),
+    ("open_water", {"open_water": OPEN_WATER, "rated_rpm": 198.0}, 0.36),
+    ("ducted_series", {"open_water": OPEN_WATER, "rated_rpm": 198.0}, 0.83),
+    ("ducted_series", {"open_water": OPEN_WATER}, 0.36),     # no rated_rpm: the table
+    ("ducted_series", {}, None),                             # no data: no curves
+    ("open_water", {"rated_rpm": 198.0}, None),              # the series only when chosen
+])
+def test_propeller_curves_chooses_the_curves(source, data, kt0):
+    thruster = Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=1.9, power_kw=500.0, **data)
+    [curves] = ThrusterDynamics(Layout((thruster,), propeller_curves=source))._curves
+    if kt0 is None:
+        assert curves is None
+    else:
+        assert curves[0](0.0) == pytest.approx(kt0, abs=5e-3)
+
+
+def test_unknown_propeller_curves_stops_the_run(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text("""
+[allocation]
+propeller_curves = "open-water"
+
+[[thrusters]]
+name = "AZ"
+kind = "azimuth"
+x = 0.0
+y = 0.0
+max_thrust = 200e3
+""")
+    with pytest.raises(ValueError, match="propeller_curves"):
+        load_layout(config)

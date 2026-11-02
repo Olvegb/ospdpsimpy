@@ -3,9 +3,12 @@
 The FMU has only ONE parameter, config_path, and reads the thrusters itself
 from the config file when the simulation starts. The dynamics are
 helpfunctions.dynamics.ThrusterDynamics; this file only moves values
-between FMI variables and that code. ThrusterDynamicsKtKq
-(thruster_dynamics_ktkq.py) is this FMU with the thrust from KT/KQ propeller
-curves instead.
+between FMI variables and that code. [allocation] propeller_curves in the
+config chooses where KT and KQ come from: "none", "open_water" or "ducted_series".
+
+To compare them, run the simulation once with each value. Only the config
+changes, so nothing is rebuilt, and the run folder's config.toml shows which
+one was used.
 
 The thrusters are slots, as in thrust_allocation.py: the k-th [[thrusters]]
 entry in config.toml is thruster<k>_... here. Slots without a thruster
@@ -40,9 +43,9 @@ SLOTS = range(1, MAX_THRUSTERS + 1)
 class ThrusterDynamics(Fmi2Slave):
 
     author = "William"
-    description = ("Thruster dynamics: thrust lag and azimuth rate limits, and the force "
-                   "(X, Y, N) on the vessel")
-    model_class = dynamics.ThrusterDynamics  # ThrusterDynamicsKtKq puts its own model here
+    description = ("Thruster dynamics: thrust lag, azimuth rate limits, thrust loss with speed "
+                   "from the propeller curves chosen in the config, and the force (X, Y, N) "
+                   "on the vessel")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -63,20 +66,21 @@ class ThrusterDynamics(Fmi2Slave):
 
         # INPUTS: the vessel's LF velocity in the body frame (u, v [m/s],
         # r [rad/s]), its heading (yaw [rad]) and the current (north, east
-        # [m/s]). Not used here: ThrusterDynamicsKtKq uses them for the speed
-        # through the water. They are on both FMUs so either one can be
-        # "dynamics" in OspSystemStructure.xml with the same connections.
+        # [m/s]), for the speed through the water. Only thrusters with
+        # propeller curves use them.
         for name in ("u", "v", "r", "yaw", "current_north", "current_east"):
             setattr(self, name, 0.0)
             self.register_variable(Real(name, causality=Fmi2Causality.input))
 
-        # OUTPUTS: per slot the actual thrust [N], direction [deg] and power
-        # [kW]; the total force on the vessel in the body frame (X, Y [N],
-        # N [Nm], the same names as Olve's WindLoads), and the total power.
-        # Power is 0 for a thruster without power_kw in the config.
+        # OUTPUTS: per slot the actual thrust [N], direction [deg], power [kW],
+        # shaft speed [rps] and propeller torque [Nm]; the total force on the
+        # vessel in the body frame (X, Y [N], N [Nm], the same names as Olve's
+        # WindLoads), and the total power. Power is 0 for a thruster without
+        # curves and without power_kw; shaft speed and torque are 0 without curves.
         for k in SLOTS:
             for name in (f"thruster{k}_thrust", f"thruster{k}_azimuth_deg",
-                         f"thruster{k}_power_kw"):
+                         f"thruster{k}_power_kw", f"thruster{k}_shaft_speed",
+                         f"thruster{k}_torque"):
                 setattr(self, name, 0.0)
                 self.register_variable(Real(name, causality=Fmi2Causality.output))
         self.X = self.Y = self.N = self.total_power_kw = 0.0
@@ -94,7 +98,7 @@ class ThrusterDynamics(Fmi2Slave):
         if len(layout.thrusters) > MAX_THRUSTERS:
             raise ValueError(f"{self.config_path}: {len(layout.thrusters)} thrusters, "
                              f"but the FMU has {MAX_THRUSTERS} slots")
-        self.model = self.model_class(layout)
+        self.model = dynamics.ThrusterDynamics(layout)
         # The outputs at time 0: a step of 0 s changes nothing.
         self.move(0.0)
 
@@ -103,6 +107,12 @@ class ThrusterDynamics(Fmi2Slave):
         return True
 
     def move(self, dt):
+        # The current in the body frame, subtracted from the vessel's velocity.
+        cos_yaw, sin_yaw = math.cos(self.yaw), math.sin(self.yaw)
+        u_c = self.current_north * cos_yaw + self.current_east * sin_yaw
+        v_c = -self.current_north * sin_yaw + self.current_east * cos_yaw
+        self.model.velocity = (self.u - u_c, self.v - v_c, self.r)
+
         slots = range(1, len(self.model.thrusters) + 1)
         state = self.model.step(
             [getattr(self, f"thruster{k}_thrust_command") for k in slots],
@@ -111,10 +121,12 @@ class ThrusterDynamics(Fmi2Slave):
             dt,
         )
         power = [0.0 if math.isnan(p) else float(p) for p in state.power_kw]
-        for k, thrust, angle, p in zip(slots, state.thrust, state.azimuth_deg, power):
+        for k, thrust, angle, p, n, q in zip(slots, state.thrust, state.azimuth_deg, power,
+                                             state.shaft_speed, state.torque):
             setattr(self, f"thruster{k}_thrust", float(thrust))
             setattr(self, f"thruster{k}_azimuth_deg", float(angle))
             setattr(self, f"thruster{k}_power_kw", p)
+            setattr(self, f"thruster{k}_shaft_speed", float(n))
+            setattr(self, f"thruster{k}_torque", float(q))
         self.X, self.Y, self.N = (float(v) for v in state.tau)
         self.total_power_kw = sum(power)
-        return state
