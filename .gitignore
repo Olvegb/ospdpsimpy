@@ -13,6 +13,7 @@ fmus/
 results/
 data_examples/GunnerusL35_20201112.mat
 data_examples/gunnerus_validation_data.zip
+data_examples/gunnerus.mat
 
 
 # Made by pytest and ruff
