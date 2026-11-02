@@ -89,11 +89,8 @@
             </InitialValues>
         </Simulator>
 
-        <!-- ThrusterDynamicsKtKq: thrust from the KT/KQ propeller curves (open_water in the
-             config). For thrust = lagged command, use source="fmus/ThrusterDynamics.fmu".
-             For the Ka 4-70 / nozzle 19A ducted series (rated_rpm in the config), use
-             source="fmus/ThrusterDynamicsDucted.fmu". -->
-        <Simulator name="dynamics" source="fmus/ThrusterDynamicsKtKq.fmu">
+        <!-- Where KT and KQ come from is [allocation] propeller_curves in the config. -->
+        <Simulator name="dynamics" source="fmus/ThrusterDynamics.fmu">
             <InitialValues>
                 <InitialValue variable="config_path">
                     <String value="configs/gunnerus.toml"/>
@@ -1760,8 +1757,7 @@
             <Variable simulator="vessel" name="N_thrusters"/>
         </VariableConnection>
 
-        <!-- vessel, environment -> dynamics: speed through the water for the propeller curves
-             (only ThrusterDynamicsKtKq and ThrusterDynamicsDucted use it) -->
+        <!-- vessel, environment -> dynamics: speed through the water for the propeller curves -->
         <VariableConnection>
             <Variable simulator="vessel" name="lf_u"/>
             <Variable simulator="dynamics" name="u"/>

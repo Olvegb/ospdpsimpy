@@ -252,6 +252,12 @@ flushing_sectors = true         # add the DNV-ST-0111 [3.11.3] flushing sectors 
 # When the command is more than the thrusters can give: cost per N of error
 # in X and Y, and per Nm in N. Equal weights keep the heading first.
 tau_weights = [1.0, 1.0, 1.0]
+# Where ThrusterDynamics gets KT and KQ from, for every thruster:
+#   "none"           no curves: the thrust on the vessel is the lagged command
+#   "open_water"     the thruster's open_water table; loses thrust with speed
+#   "ducted_series"  Ka 4-70 / nozzle 19A from rated_rpm; without rated_rpm as "open_water"
+# A thruster without the data has no curves. To compare, run once with each value.
+propeller_curves = "open_water"
 
 
 # Switchboards. Leave out every [[power_sources]] for no power limit.
