@@ -9,6 +9,7 @@ ospfmusim/run.py puts every run in its own folder, results/<YYYYMMDD_HHMMSS>[_na
 with a copy of the config it was run with (config.toml). libcosim writes one
 CSV per FMU there, named <simulator>_<YYYYMMDD>_<HHMMSS>_<microseconds>.csv,
 where <simulator> is the name in OspSystemStructure.xml (environment, vessel, ...).
+run.py adds real_time.csv: the real time per simulated time (see run_steps() there).
 
 License: MIT (see LICENSE in the repository root)
 Authors: Olve Grønås Birkeland (2026)
@@ -27,6 +28,7 @@ CONFIGS = ROOT / "configs"
 SYSTEM = ROOT / "src" / "ospfmusim" / "OspSystemStructure.xml"
 
 CSV_NAME = re.compile(r"^(?P<simulator>.+)_\d{8}_\d{6}_\d+\.csv$")
+REAL_TIME_FILE = "real_time.csv"
 WAVE_COLUMN = re.compile(r"^wave\d+_")
 
 # Unit of a result column, from its name: the first pattern that matches wins.
@@ -51,12 +53,15 @@ UNITS = [(re.compile(pattern), unit) for pattern, unit in [
 
 
 def result_files(folder):
-    """{simulator: newest CSV file} in a results folder."""
+    """{simulator: newest CSV file} in a results folder, and real_time if the run has it."""
     files = {}
     for path in sorted(Path(folder).glob("*.csv")):  # sorted by name = by time stamp
         match = CSV_NAME.match(path.name)
         if match:
             files[match["simulator"]] = path
+    real_time = Path(folder) / REAL_TIME_FILE
+    if real_time.is_file():                          # not in runs from before it was added
+        files["real_time"] = real_time
     return files
 
 
@@ -139,6 +144,11 @@ def thruster_slots(config):
     return [(k, thruster["name"]) for k, thruster in enumerate(thrusters, start=1)]
 
 
+def real_time_factor(real_time):
+    """Simulated seconds per real second while stepping: above 1 is faster than real time."""
+    return (real_time.index[-1] - real_time.index[0]) / real_time["step_time_s"].sum()
+
+
 def total_wind_speed(environment):
     return (environment["mean_wind_speed"] + environment["slowly_varying_wind_speed"]
             + environment["gust_wind_speed"])
@@ -182,6 +192,10 @@ def summary(results, config):
     first = next(iter(results.values()), None)
     if first is not None and len(first):
         out["Simulated time"] = (first.index[-1], "s")
+    real_time = results.get("real_time")
+    if real_time is not None and len(real_time) > 1:
+        out["Real time"] = (real_time["real_time_s"].iloc[-1], "s")
+        out["Real-time factor"] = (real_time_factor(real_time), "")
     dp = results.get("dp_controller")
     has_dp = dp is not None and len(dp)
     vessel = results.get("vessel")

@@ -75,3 +75,34 @@ def test_mirrored_waves_give_mirrored_drift(tmp_path, wave_from_deg):
 def test_drift_pushes_the_vessel_the_way_the_waves_travel(tmp_path, wave_from_deg, x_sign, y_sign):
     x, y, _ = drift(run_vessel(tmp_path, True, wave_from_deg))
     assert x*x_sign >= 0 and y*y_sign >= 0
+
+
+def test_vessel_follows_the_wave_inputs_and_leaves_out_empty_components(tmp_path):
+    vessel = run_vessel(tmp_path, False)
+    waves = vessel.wave_model.components
+    assert len(waves.amplitude) == 1                 # the other 99 have no amplitude
+    moved = vessel.wf_north
+
+    vessel.do_step(2.0, 0.1)
+    assert vessel.wave_model.components is waves     # nothing changed, so nothing is rebuilt
+
+    vessel.wave1_amplitude = 1.0                     # a new sea state reaches both wave models
+    vessel.do_step(2.1, 0.1)
+    assert vessel.wave_model.components.amplitude[0] == 1.0
+    assert vessel.wf_model.components.amplitude[0] == 1.0
+
+    vessel.wave1_amplitude = 0.0                     # a calm sea: no loads and no motion
+    vessel.do_step(2.2, 0.1)
+    assert len(vessel.wave_model.components.amplitude) == 0
+    assert np.all(drift(vessel) == 0.0) and vessel.wf_north == 0.0 != moved
+
+    vessel.wave1_amplitude = -1.0                    # a bad value is still refused
+    with pytest.raises(ValueError, match="nonnegative"):
+        vessel.do_step(2.3, 0.1)
+
+
+def test_internal_steps_use_the_same_drift_as_the_reported_one(tmp_path):
+    vessel = run_vessel(tmp_path, False)
+    pose = vessel.state[:6]
+    np.testing.assert_array_equal(vessel.wave_model.second_order(2.0, pose),
+                                  vessel.wave_model.calculate(2.0, pose).tau_second_order)

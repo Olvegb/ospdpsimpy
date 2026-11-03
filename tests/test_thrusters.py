@@ -13,14 +13,18 @@
    match the series, and a unit at its rated rpm in bollard pull draws its rated power.
 6. propeller_curves chooses the curves, a thruster without the data falls back,
    and an unknown value is an error.
+7. The allocation calls HiGHS directly: every LP gets the same answer as with linprog.
 
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland (2026)
 """
 import numpy as np
 import pytest
+from scipy.optimize import linprog
 
+from app.build.data import default_config
 from ospfmusim.thruster import thrust_allocation, thruster_dynamics
+from ospfmusim.thruster.helpfunctions import allocation
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
 from ospfmusim.thruster.helpfunctions.dynamics import (KQ_19A, KT_19A, RHO, ThrusterDynamics,
                                                        _poly)
@@ -249,3 +253,32 @@ max_thrust = 200e3
 """)
     with pytest.raises(ValueError, match="propeller_curves"):
         load_layout(config)
+
+
+def test_every_lp_gets_the_same_answer_as_with_linprog(monkeypatch):
+    # Fails first if a scipy upgrade changes the private binding _solve() uses.
+    solve = allocation._solve
+    solved, infeasible = [], []
+
+    def both(c, a_ub, b_ub, a_eq, b_eq, bounds):
+        x = solve(c, a_ub, b_ub, a_eq, b_eq, bounds)
+        expected = linprog(c, A_ub=a_ub, b_ub=b_ub, A_eq=a_eq, b_eq=b_eq, bounds=bounds,
+                           method="highs")
+        if expected.status == 2:
+            assert x is None
+            infeasible.append(c)
+        else:
+            assert np.array_equal(x, expected.x)
+            solved.append(c)
+        return x
+
+    monkeypatch.setattr(allocation, "_solve", both)
+    # The config's layout, with its zones and power limits: within reach, then saturated.
+    allocator = ThrustAllocator(load_layout(default_config()))
+    for tau in ([2e4, 1e4, 1e5], [2.5e4, 0.5e4, -1e5], [5e6, 5e6, 5e7]):
+        allocator.step(tau, dt=DT)
+    assert solved
+    # A tunnel thruster cannot give a surge force at all.
+    tunnel = ThrustAllocator(Layout((Thruster("T", "tunnel", 10.0, 0.0, 1e5),)))
+    assert tunnel.step([1e3, 0.0, 0.0]).saturated
+    assert infeasible

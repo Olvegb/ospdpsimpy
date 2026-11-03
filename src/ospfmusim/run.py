@@ -20,9 +20,10 @@ the duration in that config ([simulation] duration).
 
 run_simulation() first builds the FMUs the system uses, but only those whose
 model code has changed (see build.py). Every run gets its own folder,
-results/<YYYYMMDD_HHMMSS>[_name]/ in the repo folder, with one CSV per FMU and
-a copy of the config (config.toml) and the system structure it was run with.
-Nothing from earlier runs is overwritten.
+results/<YYYYMMDD_HHMMSS>[_name]/ in the repo folder, with one CSV per FMU, the
+real time the run took (real_time.csv, see run_steps()) and a copy of the config
+(config.toml) and the system structure it was run with. Nothing from earlier
+runs is overwritten.
 
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland, Olve Grønås Birkeland (2026)
@@ -33,6 +34,7 @@ import shutil
 import tomllib
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 
 import pandas as pd
 from libcosimpy.CosimExecution import CosimExecution
@@ -40,7 +42,7 @@ from libcosimpy.CosimLogging import CosimLogLevel, log_output_level
 from libcosimpy.CosimObserver import CosimObserver
 
 from app.build.config_tools import make_paths_absolute, set_values
-from app.build.data import default_config
+from app.build.data import REAL_TIME_FILE, default_config, real_time_factor
 from ospfmusim.build import SYSTEM_STRUCTURE, build_fmus
 
 ROOT = Path(__file__).resolve().parents[2]       # the repo folder
@@ -60,6 +62,31 @@ def set_config_path(execution, config_path):
         for variable in execution.slave_variables(slave.index):
             if variable.name == b"config_path":
                 execution.string_initial_value(slave.index, variable.reference, str(config_path))
+
+
+def run_steps(execution, target_time, start):
+    """Runs the simulation to target_time [ns] and returns the real-time vector.
+
+    One row per step, indexed by the simulated time Time [s] as in the FMUs' CSV files:
+      real_time_s  real time since start (time.perf_counter()) [s]. The row at
+                   Time 0 is what loading the FMUs took.
+      step_time_s  real time of this step alone [s]. The first step also
+                   initializes the FMUs.
+    One step at a time, so each can be timed: the results are the same as with
+    execution.simulate_until().
+    """
+    times, real_times = [], []
+    while True:
+        now = execution.status().current_time
+        times.append(now / 1e9)                  # libcosim measures time in nanoseconds
+        real_times.append(perf_counter() - start)
+        if now >= target_time:
+            break
+        if not execution.step():
+            raise RuntimeError("The simulation failed, see the error message above.")
+    vector = pd.DataFrame({"real_time_s": real_times}, index=pd.Index(times, name="Time"))
+    vector["step_time_s"] = vector["real_time_s"].diff().fillna(0.0)
+    return vector
 
 
 def run_simulation(mat_file, config_file, system_structure=SYSTEM_STRUCTURE, duration=None,
@@ -106,6 +133,7 @@ def run_simulation(mat_file, config_file, system_structure=SYSTEM_STRUCTURE, dur
     # 3. Load the system, and point every FMU to the run's config. libcosim
     #    reads the FMU paths (source="fmus/...") relative to the system structure.
     log_output_level(CosimLogLevel.WARNING)  # hide routine messages, show only warnings and errors
+    start = perf_counter()
     execution = CosimExecution.from_osp_config_file(osp_path=str(system_structure))
     set_config_path(execution, run_config)
 
@@ -114,16 +142,14 @@ def run_simulation(mat_file, config_file, system_structure=SYSTEM_STRUCTURE, dur
     execution.add_observer(observer=observer)
 
     # 5. Run. The FMUs read the config here (in exit_initialization_mode).
-    #    libcosim measures time in nanoseconds.
     try:
-        finished = execution.simulate_until(target_time=int(duration * 1e9))
+        real_time = run_steps(execution, int(duration * 1e9), start)
     finally:
         # Close the simulation, also when it failed, so libcosim finishes
         # writing the CSV files. A simulation that is still open when Python
         # exits makes Python hang.
         del execution, observer
-    if not finished:
-        raise RuntimeError("The simulation failed, see the error message above.")
+    real_time.to_csv(run_dir / REAL_TIME_FILE)
     return run_dir
 
 
@@ -141,8 +167,11 @@ def print_summary(run_dir):
     environment, vessel = last("environment"), last("vessel")
     wind_speed = (environment["mean_wind_speed"] + environment["slowly_varying_wind_speed"]
                   + environment["gust_wind_speed"])
+    real_time = pd.read_csv(run_dir / REAL_TIME_FILE, index_col="Time")
     print(f"Vessel:  {config['vessel']['type']}, "
           f"simulated for {config['simulation']['duration']} s")
+    print(f"Real time: {real_time['real_time_s'].iloc[-1]:.1f} s, "
+          f"real-time factor {real_time_factor(real_time):.2f} (simulated s per real s while stepping)")
     print(f"Wind:    {wind_speed:.1f} m/s from {environment['wind_direction_deg']:.1f} deg "
           "(NED, at the end)")
     print(f"Current: {environment['current_speed']} m/s from "
