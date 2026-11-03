@@ -85,6 +85,7 @@ class Waves(Fmi2Slave):
         self.settings = None
         self.sea = None              # the current wave components
         self._built_for = None       # (H_s, T_p) the sea was built for
+        self._sent_for = None        # (H_s, T_p, wave direction) the outputs are for
 
     def exit_initialization_mode(self):
         # Runs once, right before the simulation starts: read the config file.
@@ -97,9 +98,14 @@ class Waves(Fmi2Slave):
         self.do_step(0.0, 0.0)
 
     def do_step(self, current_time, step_size):
-        # The wave components do not depend on time (the hull FMU uses t), so the
-        # sea is only built again when H_s or T_p changes, with the same seed.
-        # A new wave direction only turns all the components.
+        # The wave components do not depend on time (the hull FMU uses t), so
+        # nothing happens until the sea state changes. The sea is only built
+        # again when H_s or T_p changes, with the same seed. A new wave direction
+        # only turns all the components.
+        sea_state = (self.H_s, self.T_p, self.wave_direction_deg)
+        if sea_state == self._sent_for:
+            return True
+        self._sent_for = sea_state
         if (self.H_s, self.T_p) != self._built_for:
             self.sea, self.kept_energy_fraction = sea_from_settings(self.H_s, self.T_p,
                                                                     self.settings, N_WAVES)

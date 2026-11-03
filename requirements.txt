@@ -14,7 +14,7 @@
 # pinned exactly: the FMUs in fmus/ are built with that pythonfmu, and
 # libcosimpy 0.0.x can change its API in any release.
 numpy>=2.0,<3        # every FMU that does matrix maths (vessel, waves, Kalman filter, controller, thrusters), app/build/
-scipy>=1.13,<2       # thruster/helpfunctions/allocation.py: linprog (HiGHS); hull/helpfunctions/Wamit.py: loadmat (.mat hydrodynamics)
+scipy>=1.17,<2       # thruster/helpfunctions/allocation.py: scipy's HiGHS binding (private, see _solve there); hull/helpfunctions/Wamit.py: loadmat (.mat hydrodynamics)
 pandas>=3.0,<4       # ospfmusim/run.py and app/build/data.py: read the result CSVs
 pythonfmu==0.7.0     # every FMU (Fmi2Slave); ospfmusim/build.py runs "python -m pythonfmu build"
 libcosimpy==0.0.6    # ospfmusim/run.py: runs OspSystemStructure.xml

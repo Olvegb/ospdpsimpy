@@ -19,9 +19,10 @@ Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 from dataclasses import dataclass, replace
 from itertools import product
+from math import inf
 
 import numpy as np
-from scipy.optimize import linprog
+from scipy.optimize._highspy import _core as highs
 
 from .power import supply_matrix, thruster_power_kw, usable_power_kw
 from .zones import allowed_arcs, forbidden_zones
@@ -228,13 +229,38 @@ def _size_rows(thruster, n_sides):
 
 
 def _solve(c, a_ub, b_ub, a_eq, b_eq, bounds):
-    """linprog with HiGHS. Returns the solution, or None if the constraints cannot be met."""
-    result = linprog(c, A_ub=a_ub, b_ub=b_ub, A_eq=a_eq, b_eq=b_eq, bounds=bounds, method="highs")
-    if result.status == 2:
+    """
+    Minimises c . x with a_ub x <= b_ub, a_eq x = b_eq and bounds on x, with
+    HiGHS. Returns the solution, or None if the constraints cannot be met.
+    """
+    # ponytail: scipy's private binding to HiGHS, because linprog around the same
+    # solver takes half of the allocation's time. Same answers, bit for bit
+    # (tests/test_thrusters.py). If a scipy upgrade moves it, use the highspy
+    # package, which has the same calls, or go back to linprog.
+    a = np.vstack([a_ub, a_eq])
+    columns, rows = np.nonzero(a.T)              # column by column, as HiGHS wants it
+    lp = highs.HighsLp()
+    lp.num_row_, lp.num_col_ = lp.a_matrix_.num_row_, lp.a_matrix_.num_col_ = a.shape
+    lp.col_cost_ = c
+    lp.col_lower_ = [-inf if low is None else low for low, _ in bounds]
+    lp.col_upper_ = [inf if high is None else high for _, high in bounds]
+    lp.row_lower_ = np.r_[np.full(len(b_ub), -inf), b_eq]
+    lp.row_upper_ = np.r_[b_ub, b_eq]
+    lp.a_matrix_.format_ = highs.MatrixFormat.kColwise
+    lp.a_matrix_.start_ = np.searchsorted(columns, np.arange(a.shape[1] + 1))
+    lp.a_matrix_.index_ = rows
+    lp.a_matrix_.value_ = a[rows, columns]
+    solver = highs._Highs()
+    solver.setOptionValue("output_flag", False)
+    solver.setOptionValue("threads", 1)          # these small LPs gain nothing from more
+    solver.passModel(lp)
+    solver.run()
+    status = solver.getModelStatus()
+    if status == highs.HighsModelStatus.kInfeasible:
         return None
-    if result.status != 0:
-        raise RuntimeError(f"thrust allocation LP failed: {result.message}")
-    return result.x
+    if status != highs.HighsModelStatus.kOptimal:
+        raise RuntimeError(f"thrust allocation LP failed: {solver.modelStatusToString(status)}")
+    return np.array(solver.getSolution().col_value)
 
 
 def _place(blocks, n):

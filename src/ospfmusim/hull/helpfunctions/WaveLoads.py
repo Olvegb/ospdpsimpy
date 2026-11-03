@@ -169,6 +169,15 @@ class WaveLoadResult:
     tau_mean: np.ndarray          # Diagnostic, already included in tau_second_order.
 
 
+def body_load(value):
+    # [X, Y, N] -> [X, Y, Z, K, M, N].
+    load = np.zeros(6)
+    load[[0, 1, 5]] = value
+    if not np.all(np.isfinite(load)):
+        raise ValueError('Wave calculation produced nonfinite loads')
+    return load
+
+
 # --- Viljar: wave_forces/vessel_data.py ---
 DOFS = ("surge", "sway", "yaw")
 
@@ -409,13 +418,11 @@ class WaveLoads:
         eta = check_pose_time(time, eta_lf)
         first, drift = self.model.loads(time, (eta[0], eta[1], eta[5]))
         mean = self.model.mean_drift(eta[5])
-        outputs = []
-        for value in (first, drift, mean):
-            load = np.zeros(6)
-            load[[0, 1, 5]] = value
-            if not np.all(np.isfinite(load)):
-                raise ValueError('Wave calculation produced nonfinite loads')
-            outputs.append(load)
         # OUTPUT: tau_first_order (diagnostic), tau_second_order (sent to LF),
         # tau_mean (diagnostic).
-        return WaveLoadResult(*outputs)
+        return WaveLoadResult(*(body_load(value) for value in (first, drift, mean)))
+
+    def second_order(self, time, eta_lf):
+        # tau_second_order of calculate() alone: all LF.py needs in its internal steps.
+        eta = check_pose_time(time, eta_lf)
+        return body_load(self.model.drift(time, (eta[0], eta[1], eta[5])))

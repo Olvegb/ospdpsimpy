@@ -44,7 +44,15 @@ def skew(v):
 def coriolis(mass, velocity):
     momentum = mass @ velocity
     p, h = skew(momentum[:3]), skew(momentum[3:])
-    return np.block([[np.zeros((3, 3)), -p], [-p, -h]])
+    matrix = np.zeros((6, 6))
+    matrix[:3, 3:] = matrix[3:, :3] = -p
+    matrix[3:, 3:] = -h
+    return matrix
+
+
+def cross(a, b):
+    # As np.cross, but this runs in every RK4 stage and np.cross is slow on single vectors.
+    return np.array([a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]])
 
 
 class LF:
@@ -85,14 +93,12 @@ class LF:
     #     return obj
 
     def derivative(self, state, tau, current_ned=(0., 0., 0.)):
-        state = checked(state, (12,), "state")
-        tau = checked(tau, (6,), "tau")
-        current_ned = checked(current_ned, (3,), "current_ned")
+        # step() has checked the inputs, and checks the result of the four stages.
         eta, nu = state[:6], state[6:]
         current_body = rotation(eta[3:]).T @ current_ned
-        nu_c = np.r_[current_body, np.zeros(3)]
+        nu_c = np.concatenate((current_body, np.zeros(3)))
         nu_r = nu - nu_c
-        nu_c_dot = np.r_[-np.cross(nu[3:], current_body), np.zeros(3)]
+        nu_c_dot = np.concatenate((-cross(nu[3:], current_body), np.zeros(3)))
 
         # (MRB + A) nu_dot = tau - CRB*nu - CA*nu_r - D*nu_r - G*eta + A*nu_c_dot
         net_load = (tau - coriolis(self.M_RB, nu) @ nu
@@ -100,7 +106,7 @@ class LF:
                     - self.D @ nu_r - self.G @ eta + self.A @ nu_c_dot)
         eta_dot = kinematics(eta) @ nu
         nu_dot = np.linalg.solve(self.M, net_load)
-        return np.r_[eta_dot, nu_dot]
+        return np.concatenate((eta_dot, nu_dot))
 
     def step(self, state, dt, *, tau_wind=(0.,)*6, tau_thruster=(0.,)*6,
              tau_wave_drift=(0.,)*6, current_ned=(0., 0., 0.),
