@@ -270,8 +270,16 @@ wave_motion_std = [0.5, 0.5, 0.01]              # expected std of the WF motion 
 [allocation]
 enabled = true                  # false: every thrust command is 0, the vessel drifts
 flushing_sectors = true         # add the DNV-ST-0111 [3.11.3] flushing sectors (needs diameter)
+# How the thruster forces are found:
+#   "linear_program"  the lowest load on the worst thruster; when saturated it
+#                     gives up sway or surge before heading (tau_weights)
+#   "pseudo_inverse"  the lowest sum of squared loads; much faster and less power,
+#                     but when saturated it gives up X, Y and N alike
+# To compare, run once with each value.
+method = "pseudo_inverse"
 # When the command is more than the thrusters can give: cost per N of error
-# in X and Y, and per Nm in N. Equal weights keep the heading first.
+# in X and Y, and per Nm in N. Equal weights keep the heading first. With
+# "pseudo_inverse" only for a part of tau no thruster can push along.
 tau_weights = [1.0, 1.0, 1.0]
 # Where ThrusterDynamics gets KT and KQ from, for every thruster:
 #   "none"           no curves: the thrust on the vessel is the lagged command

@@ -26,6 +26,8 @@ import numpy as np
 KINDS = ("azimuth", "tunnel", "shaft_line")
 # Where ThrusterDynamics gets KT and KQ from (dynamics.py).
 PROPELLER_CURVES = ("none", "open_water", "ducted_series")
+# How ThrustAllocator finds the thruster forces (allocation.py).
+ALLOCATION_METHODS = ("linear_program", "pseudo_inverse")
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,8 @@ class Layout:
     # Where ThrusterDynamics gets KT and KQ from, one of PROPELLER_CURVES. The
     # allocation doesn't use it: it always counts on the commanded thrust.
     propeller_curves: str = "open_water"
+    # How the allocation finds the thruster forces, one of ALLOCATION_METHODS.
+    method: str = "linear_program"
 
     def __post_init__(self):
         if len(self.tau_weights) != 3 or min(self.tau_weights) < 0:
@@ -155,6 +159,8 @@ class Layout:
         if self.propeller_curves not in PROPELLER_CURVES:
             raise ValueError(f"propeller_curves must be one of {PROPELLER_CURVES}, "
                              f"got {self.propeller_curves!r}")
+        if self.method not in ALLOCATION_METHODS:
+            raise ValueError(f"method must be one of {ALLOCATION_METHODS}, got {self.method!r}")
 
 
 def _tuples(value):
@@ -181,6 +187,7 @@ def load_layout(path):
         enabled = true
         flushing_sectors = true
         propeller_curves = "open_water"
+        method = "pseudo_inverse"
 
         [[power_sources]]
         name = "SWBD 1"
@@ -216,7 +223,8 @@ def load_layout(path):
         sources = tuple(_build(PowerSource, s, f"{path}, power source {k}")
                         for k, s in enumerate(sources))
     allocation = data.get("allocation", {})
-    unknown = set(allocation) - {"enabled", "flushing_sectors", "tau_weights", "propeller_curves"}
+    unknown = set(allocation) - {"enabled", "flushing_sectors", "tau_weights", "propeller_curves",
+                                 "method"}
     if unknown:
         raise ValueError(f"{path}: unknown keys in [allocation]: {sorted(unknown)}")
     for key in ("enabled", "flushing_sectors"):

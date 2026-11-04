@@ -20,6 +20,8 @@ flowchart LR
 - **`[allocation] propeller_curves`** in the config chooses where ThrusterDynamics gets KT(J) and
   KQ(J) from, and so how much thrust is lost with speed through the water: `"none"`, `"open_water"`
   (§4.1) or `"ducted_series"` (§4.2). To compare them, run once with each value (§4.3).
+- **`[allocation] method`** chooses how ThrustAllocation finds the forces: `"linear_program"` (§3) or
+  `"pseudo_inverse"` (§3.1). To compare them, run once with each value.
 
 ## 1. What you need to run them
 
@@ -102,6 +104,65 @@ Every time step it:
 K = 1 … 8 (§6). With these definitions every kind of thruster pushes with
 `f = thrust · (cos α, sin α)`. A tunnel with a negative thrust pushes to port, a shaft line with a
 negative thrust pushes astern.
+
+### 3.1 `method = "pseudo_inverse"`
+
+The steps above describe `method = "linear_program"`, the default when the key is left out. With
+`"pseudo_inverse"` the inputs, outputs and step 4 stay the same, but the forces come from a matrix
+product instead of linear programs. τ is linear in the force components, `τ = B f`, and the forces that
+give τ with the lowest `Σ (fᵢ / max_thrustᵢ)²` are
+
+```text
+f = S · pinv(B · S) · τ,    S = diag(max_thrust)
+```
+
+So where the linear programs limit the worst thruster, this limits the sum of squares. It knows no
+limits by itself, so ThrustAllocation adds them:
+
+1. **Thrust limits.** Thrusters over their limit are clipped and stay there, and the others solve again
+   for the rest of τ. Scaling all forces down instead would lose capacity: 88 % of it on average on the
+   Gunnerus, and only 40 kN of the 52 kN of pure sway.
+2. **Forbidden zones.** An azimuth that points into a zone is fixed at the zone's nearest edge, and the
+   others solve again.
+3. **τ out of reach.** The largest part of τ the thrusters can give, found by halving, so the direction
+   of τ is kept. `utilisation` is 1 / that part, or `inf` if τ can't be given in any amount.
+   `tau_weights` only counts for a part of τ no thruster can push along.
+4. **Power.** With a source over its usable power, all forces are scaled down until it isn't, and
+   `saturated` is set. No load moves over to another switchboard.
+5. **Turning.** While an azimuth can't reach its angle this step, each azimuth gives the part of its
+   force along its present angle, and only the tunnels and shaft lines solve for the rest. Solving for the
+   azimuths too blows up when they are nearly parallel: up to 77 kN wrong for a command of 30 kN.
+
+What that gives on the Gunnerus (3 thrusters, `configs/gunnerus.toml`). The simulation rows are one 1000 s
+run per method, the position and heading after the first 200 s; the capacity and saturation rows are the
+allocation alone, the load reversal too (30 kN flipping sign every 30 s):
+
+| | `linear_program` | `pseudo_inverse` |
+|---|---|---|
+| Allocation step, within reach | 11 ms | 0.8 ms |
+| Allocation step, saturated | 16 ms | 9 ms |
+| Whole simulation | 216 s | 111 s |
+| Low-frequency position error, RMS and largest | 0.90 m, 2.14 m | 0.76 m, 2.13 m |
+| Low-frequency heading error, largest | 9.6° | 9.2° |
+| Mean power | 8.1 kW | 5.5 kW |
+| Azimuth travel, the two together | 22.7 °/s | 23.1 °/s |
+| Time `turn_limited` | 75 % | 99 % |
+| Capacity over 72 directions, with zones | 100 % | 99.4 % on average, 90 % at worst |
+| τ = (60 kN, 50 kN, 500 kNm), out of reach, gives | (60, 14, 500): heading held | (36, 30, 298): direction held |
+| Largest sway error in a load reversal | 3.6 kN | 31 kN |
+
+Things to keep in mind when comparing:
+
+- **The run never saturated** (0 % of the time for both), so it says nothing about the biggest drawback:
+  when τ is out of reach the pseudo-inverse gives up heading like everything else. Compare a run in
+  heavier weather before relying on it there.
+- **`utilisation` below 1 means something else.** It is the load on the worst thruster, not the lowest
+  that is possible, so it is higher than with the linear programs and can't be compared between them
+  (0.63 against 0.45 at most in the run above). Out of reach they agree within 0.5 %.
+- **`turn_limited` is set more easily.** The linear programs often still reach τ with the azimuths held,
+  while the projection in step 5 nearly always misses it by a little.
+- **`max_reverse_thrust`** is only respected through the clip in step 1: the solve itself doesn't know
+  that a thruster is weaker in one direction.
 
 ## 4. ThrusterDynamics FMU
 
@@ -284,6 +345,7 @@ at start-up.
 ```toml
 [allocation]                  # optional
 flushing_sectors = true       # add the DNV-ST-0111 [3.11.3] flushing sectors (needs diameter)
+method = "pseudo_inverse"     # "linear_program" (the default) or "pseudo_inverse" (§3.1)
 tau_weights = [1.0, 1.0, 1.0] # cost per N of X and Y error, per Nm of N error, when saturated
 propeller_curves = "open_water" # "none", "open_water" or "ducted_series" (§4.3)
 
@@ -340,11 +402,13 @@ constants (5 s azimuths, 3 s tunnels) and turn rates (10 °/s) are typical but m
   can't give.
 - **Saturation.** When τ is out of reach, `saturated` is true and `utilisation` is above 1, or `inf`
   if τ can't be given in any amount. The commands then give the closest reachable τ. With equal
-  `tau_weights`, the heading (N) is held first and Y or X gives way.
+  `tau_weights`, the heading (N) is held first and Y or X gives way. With `method = "pseudo_inverse"`
+  all three give way alike (§3.1).
 - **Switchboard power is fixed** from `configs/*.toml`; it is not an FMU input yet.
 - **Step size.** Tested with fixed steps of 0.1 s. One allocation step takes about 6 ms on the
   4-thruster layout (10 ms when saturated). More thrusters with forbidden zones mean more linear
-  programs per step. The dynamics are exact for any step size.
+  programs per step; the pseudo-inverse doesn't have that problem (times in §3.1). The dynamics are
+  exact for any step size.
 - **CSV output.** libcosim writes the Booleans (`saturated`, `turn_limited`, `thrusterK_available`)
   as 1/0.
 
