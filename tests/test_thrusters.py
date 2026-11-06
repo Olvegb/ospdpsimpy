@@ -5,26 +5,35 @@
 2. ThrustAllocator + ThrusterDynamics, a Gunnerus-like layout without thrust
    lag, starting at rest with an astern command: the force the dynamics give
    must be the one the allocator says it commands, every step.
-3. Open-water curves (ThrusterDynamicsKtKq): an azimuth at bollard pull
-   gives the commanded thrust, and loses thrust when it moves through the
-   water. The two FMUs take the same inputs; only the KT/KQ one loses thrust.
+3. Open-water curves (propeller_curves = "open_water"): an azimuth at bollard
+   pull gives the commanded thrust, and loses thrust when it moves through the
+   water. With the same inputs and "none" in the config, it doesn't.
 4. ThrustAllocation with enabled = false in [allocation]: every thrust command is 0.
-5. Ducted series (ThrusterDynamicsDucted): the Ka 4-70/19A polynomials match
-   the series, and a unit at its rated rpm in bollard pull draws its rated power.
+5. Ducted series (propeller_curves = "ducted_series"): the Ka 4-70/19A polynomials
+   match the series, and a unit at its rated rpm in bollard pull draws its rated power.
+6. propeller_curves chooses the curves, a thruster without the data falls back,
+   and an unknown value is an error.
+7. The allocation calls HiGHS directly: every LP gets the same answer as with linprog.
+8. method = "pseudo_inverse": within reach it gives tau exactly, out of reach it keeps
+   the direction of tau, and it stays out of the zones and within the power limits.
 
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland (2026)
 """
+from dataclasses import replace
+
 import numpy as np
 import pytest
+from scipy.optimize import linprog
 
-from ospfmusim.thruster import thrust_allocation, thruster_dynamics, thruster_dynamics_ktkq
+from app.build.data import default_config
+from ospfmusim.thruster import thrust_allocation, thruster_dynamics
+from ospfmusim.thruster.helpfunctions import allocation
 from ospfmusim.thruster.helpfunctions.allocation import ThrustAllocator
-from ospfmusim.thruster.helpfunctions.dynamics import ThrusterDynamics
-from ospfmusim.thruster.helpfunctions.dynamics_ducted import (KQ_19A, KT_19A,
-                                                              ThrusterDynamicsDucted, _poly)
-from ospfmusim.thruster.helpfunctions.dynamics_ktkq import RHO, ThrusterDynamicsKtKq
-from ospfmusim.thruster.helpfunctions.layout import Layout, Thruster
+from ospfmusim.thruster.helpfunctions.dynamics import (KQ_19A, KT_19A, RHO, ThrusterDynamics,
+                                                       _poly)
+from ospfmusim.thruster.helpfunctions.layout import Layout, PowerSource, Thruster, load_layout
+from ospfmusim.thruster.helpfunctions.zones import forbidden_zones
 
 RATE = 10.0      # [deg/s]
 THRUST = 100e3   # [N]
@@ -60,14 +69,14 @@ def test_without_rate_limit_full_thrust_astern_at_once():
     assert state.fx[0] == pytest.approx(-THRUST)
 
 
-@pytest.fixture(scope="module")
-def allocated():
+@pytest.fixture(scope="module", params=("linear_program", "pseudo_inverse"))
+def allocated(request):
     """Allocator and dynamics together for 25 s. Returns tau, commands, states and turns."""
     layout = Layout((
         Thruster("AZ1", "azimuth", -16.95, 2.7, 50e3, max_azimuth_rate=RATE),
         Thruster("AZ2", "azimuth", -16.95, -2.7, 50e3, max_azimuth_rate=RATE),
         Thruster("BT1", "tunnel", 14.5, 0.0, 20e3),
-    ))
+    ), method=request.param)
     tau = np.array([-30e3, 5e3, 20e3])
     allocator, model = ThrustAllocator(layout), ThrusterDynamics(layout)
     angle = np.array([0.0, 0.0, 90.0])
@@ -111,8 +120,8 @@ D = 2.0
 
 
 def propeller_azimuth():
-    return ThrusterDynamicsKtKq(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=D,
-                                                 open_water=OPEN_WATER),)))
+    return ThrusterDynamics(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=D,
+                                             open_water=OPEN_WATER),)))
 
 
 def test_bollard_pull_gives_the_commanded_thrust():
@@ -134,10 +143,15 @@ def test_speed_through_the_water_loses_thrust():
     assert state.thrust[0] == pytest.approx(RHO * D**4 * (0.36 - 0.32 * ja) * n**2)
 
 
-def test_only_the_ktkq_fmu_loses_thrust_with_speed(tmp_path):
-    """The same config and inputs in both FMUs, as when one replaces the other."""
-    config = tmp_path / "config.toml"
-    config.write_text(f"""
+def test_only_propeller_curves_lose_thrust_with_speed(tmp_path):
+    """The same inputs in the FMU, with only propeller_curves in the config changed."""
+    fmus = {}
+    for source in ("none", "open_water"):
+        config = tmp_path / f"{source}.toml"
+        config.write_text(f"""
+[allocation]
+propeller_curves = "{source}"
+
 [[thrusters]]
 name = "AZ"
 kind = "azimuth"
@@ -147,9 +161,7 @@ max_thrust = 200e3
 diameter = {D}
 open_water = {[list(row) for row in OPEN_WATER]}
 """)
-    fmus = {}
-    for cls in (thruster_dynamics.ThrusterDynamics, thruster_dynamics_ktkq.ThrusterDynamicsKtKq):
-        fmu = fmus[cls] = cls(instance_name="dynamics")
+        fmu = fmus[source] = thruster_dynamics.ThrusterDynamics(instance_name="dynamics")
         fmu.config_path = str(config)
         fmu.thruster1_thrust_command = THRUST
         fmu.u = 2.0
@@ -157,11 +169,11 @@ open_water = {[list(row) for row in OPEN_WATER]}
     model = propeller_azimuth()
     model.velocity = (2.0, 0.0, 0.0)
     expected = model.step([THRUST], [0.0])
-    old, ktkq = fmus.values()
-    assert old.thruster1_thrust == pytest.approx(THRUST)
-    assert ktkq.thruster1_thrust == pytest.approx(expected.thrust[0])
-    assert ktkq.thruster1_shaft_speed == pytest.approx(expected.shaft_speed[0])
-    assert ktkq.X == pytest.approx(expected.thrust[0])
+    assert fmus["none"].thruster1_thrust == pytest.approx(THRUST)
+    assert fmus["none"].thruster1_shaft_speed == 0.0
+    assert fmus["open_water"].thruster1_thrust == pytest.approx(expected.thrust[0])
+    assert fmus["open_water"].thruster1_shaft_speed == pytest.approx(expected.shaft_speed[0])
+    assert fmus["open_water"].X == pytest.approx(expected.thrust[0])
 
 
 def test_switched_off_allocation_gives_no_thrust(tmp_path):
@@ -193,8 +205,9 @@ def test_series_matches_ka_4_70_in_nozzle_19a():
 
 def ducted_azimuth():
     """A Gunnerus-like ducted azimuth: 1.9 m, 500 kW at 198 rpm."""
-    return ThrusterDynamicsDucted(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=1.9,
-                                                   power_kw=500.0, rated_rpm=198.0),)))
+    return ThrusterDynamics(Layout((Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=1.9,
+                                             power_kw=500.0, rated_rpm=198.0),),
+                                   propeller_curves="ducted_series"))
 
 
 def test_ducted_draws_rated_power_at_rated_rpm():
@@ -211,3 +224,181 @@ def test_ducted_loses_thrust_with_speed():
     model = ducted_azimuth()
     model.velocity = (2.0, 0.0, 0.0)
     assert model.step([THRUST], [0.0]).thrust[0] < THRUST
+
+
+@pytest.mark.parametrize("source, data, kt0", [
+    ("none", {"open_water": OPEN_WATER, "rated_rpm": 198.0}, None),
+    ("open_water", {"open_water": OPEN_WATER, "rated_rpm": 198.0}, 0.36),
+    ("ducted_series", {"open_water": OPEN_WATER, "rated_rpm": 198.0}, 0.83),
+    ("ducted_series", {"open_water": OPEN_WATER}, 0.36),     # no rated_rpm: the table
+    ("ducted_series", {}, None),                             # no data: no curves
+    ("open_water", {"rated_rpm": 198.0}, None),              # the series only when chosen
+])
+def test_propeller_curves_chooses_the_curves(source, data, kt0):
+    thruster = Thruster("AZ", "azimuth", 0.0, 0.0, 200e3, diameter=1.9, power_kw=500.0, **data)
+    [curves] = ThrusterDynamics(Layout((thruster,), propeller_curves=source))._curves
+    if kt0 is None:
+        assert curves is None
+    else:
+        assert curves[0](0.0) == pytest.approx(kt0, abs=5e-3)
+
+
+def test_unknown_propeller_curves_stops_the_run(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text("""
+[allocation]
+propeller_curves = "open-water"
+
+[[thrusters]]
+name = "AZ"
+kind = "azimuth"
+x = 0.0
+y = 0.0
+max_thrust = 200e3
+""")
+    with pytest.raises(ValueError, match="propeller_curves"):
+        load_layout(config)
+
+
+def test_every_lp_gets_the_same_answer_as_with_linprog(monkeypatch):
+    # Fails first if a scipy upgrade changes the private binding _solve() uses.
+    solve = allocation._solve
+    solved, infeasible = [], []
+
+    def both(c, a_ub, b_ub, a_eq, b_eq, bounds):
+        x = solve(c, a_ub, b_ub, a_eq, b_eq, bounds)
+        expected = linprog(c, A_ub=a_ub, b_ub=b_ub, A_eq=a_eq, b_eq=b_eq, bounds=bounds,
+                           method="highs")
+        if expected.status == 2:
+            assert x is None
+            infeasible.append(c)
+        else:
+            assert np.array_equal(x, expected.x)
+            solved.append(c)
+        return x
+
+    monkeypatch.setattr(allocation, "_solve", both)
+    # The config's layout, with its zones and power limits: within reach, then saturated.
+    allocator = ThrustAllocator(replace(load_layout(default_config()), method="linear_program"))
+    for tau in ([2e4, 1e4, 1e5], [2.5e4, 0.5e4, -1e5], [5e6, 5e6, 5e7]):
+        allocator.step(tau, dt=DT)
+    assert solved
+    # A tunnel thruster cannot give a surge force at all.
+    tunnel = ThrustAllocator(Layout((Thruster("T", "tunnel", 10.0, 0.0, 1e5),)))
+    assert tunnel.step([1e3, 0.0, 0.0]).saturated
+    assert infeasible
+
+
+def test_unknown_method_stops_the_run(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text("""
+[allocation]
+method = "pinv"
+
+[[thrusters]]
+name = "AZ"
+kind = "azimuth"
+x = 0.0
+y = 0.0
+max_thrust = 200e3
+""")
+    with pytest.raises(ValueError, match="method"):
+        load_layout(config)
+
+
+def gunnerus():
+    """The Gunnerus layout, its zones and power limits, with the pseudo-inverse."""
+    return replace(load_layout(default_config().parent / "gunnerus.toml"), method="pseudo_inverse")
+
+
+def test_pinv_gives_tau_within_reach():
+    command = ThrustAllocator(gunnerus()).step([20e3, 10e3, 100e3])
+    np.testing.assert_allclose(command.tau, [20e3, 10e3, 100e3], atol=1e-6)
+    assert not command.saturated
+    assert command.allocation.utilisation < 1
+
+
+def test_pinv_uses_the_thrusters_beyond_where_the_plain_inverse_stops():
+    """The plain pseudo-inverse with all forces scaled reaches 40.3 kN of pure sway here."""
+    command = ThrustAllocator(gunnerus()).step([0.0, 50e3, 0.0])
+    np.testing.assert_allclose(command.tau, [0.0, 50e3, 0.0], atol=1e-6)
+    assert not command.saturated
+
+
+def test_pinv_keeps_the_direction_of_a_tau_out_of_reach():
+    """Redistributing alone would give 42 kN of sway here, and 185 kNm of yaw for nothing."""
+    command = ThrustAllocator(gunnerus()).step([0.0, 80e3, 0.0])
+    assert command.saturated
+    np.testing.assert_allclose(command.tau, [0.0, 52.2e3, 0.0], atol=100.0)
+    assert command.allocation.utilisation == pytest.approx(1.53, abs=0.01)
+    assert command.allocation.thrust_fraction.max() <= 1 + 1e-9
+
+
+def test_pinv_with_a_lost_thruster_keeps_the_direction():
+    """AZ2 lost: the tunnel and one azimuth can still give all three, with less room."""
+    command = ThrustAllocator(gunnerus()).step([60e3, 10e3, 100e3], [True, False, True])
+    assert command.saturated
+    assert command.allocation.thrust_fraction[1] == 0.0
+    assert command.allocation.thrust_fraction.max() <= 1 + 1e-9
+    np.testing.assert_allclose(command.tau / np.array([60e3, 10e3, 100e3]),
+                               command.tau[0] / 60e3, atol=1e-3)
+
+
+def test_pinv_stays_out_of_the_flushing_sectors():
+    layout = gunnerus()
+    zones = forbidden_zones(layout.thrusters, flushing=True)
+    assert zones[0] and zones[1]
+    for yaw in (0.0, 1e5, -1e5):
+        for angle in np.deg2rad(np.arange(0.0, 360.0, 15.0)):
+            tau = [10e3 * np.cos(angle), 10e3 * np.sin(angle), yaw]
+            result = ThrustAllocator(layout).step(tau).allocation
+            for i in (0, 1):
+                for start, end in zones[i]:
+                    # Up to an edge, not past it. The margin is only for rounding.
+                    assert not 1e-6 < (result.angle_deg[i] - start) % 360.0 < end - start - 1e-6
+
+
+def test_pinv_is_not_thrown_by_noise_around_zero():
+    """Nearly parallel azimuths must not push against each other during a turn."""
+    rng = np.random.default_rng(1)
+    allocator = ThrustAllocator(gunnerus())
+    for _ in range(500):
+        tau = np.array([300.0, 300.0, 1000.0]) * rng.standard_normal(3)
+        error = np.abs(allocator.step(tau, dt=DT).tau - tau)
+        assert error[:2].max() < 2e3 and error[2] < 60e3
+
+
+def test_pinv_stays_within_the_power_limits():
+    """Thrust alone would allow this: only the switchboard stops it."""
+    layout = Layout((
+        Thruster("AZ1", "azimuth", -16.95, 2.7, 50e3, power_kw=500.0,
+                 power_supply=(("SWBD", 1.0),)),
+        Thruster("AZ2", "azimuth", -16.95, -2.7, 50e3, power_kw=500.0,
+                 power_supply=(("SWBD", 1.0),)),
+    ), power_sources=(PowerSource("SWBD", 100.0),), method="pseudo_inverse")
+    command = ThrustAllocator(layout).step([60e3, 0.0, 0.0])
+    assert command.saturated
+    assert command.allocation.source_power_kw[0] == pytest.approx(100.0)
+    assert command.allocation.utilisation > 1
+    np.testing.assert_allclose(command.tau[1:], 0.0, atol=1e-6)
+
+
+def test_pinv_tunnel_alone_against_surge():
+    layout = Layout((Thruster("T", "tunnel", 10.0, 0.0, 1e5),), method="pseudo_inverse")
+    command = ThrustAllocator(layout).step([1e3, 0.0, 0.0])
+    assert command.saturated
+    assert command.allocation.utilisation == np.inf
+    np.testing.assert_allclose(command.thrust, 0.0, atol=1e-6)
+    # It still gives the part of tau it can push along.
+    command = ThrustAllocator(layout).step([1e3, 5e3, 50e3])
+    assert command.saturated
+    np.testing.assert_allclose(command.tau, [0.0, 5e3, 50e3], atol=1e-6)
+
+
+def test_pinv_keeps_within_a_smaller_reverse_thrust():
+    layout = Layout((Thruster("T", "tunnel", 0.0, 0.0, 1e5, max_reverse_thrust=4e4),),
+                    method="pseudo_inverse")
+    command = ThrustAllocator(layout).step([0.0, -8e4, 0.0])
+    assert command.saturated
+    assert command.thrust[0] == pytest.approx(-4e4, rel=1e-3)
+    assert command.allocation.thrust_fraction[0] == pytest.approx(1.0, rel=1e-3)

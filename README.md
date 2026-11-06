@@ -84,8 +84,9 @@ Thrusters at the end of the simulation (utilisation 0.509, saturated False, turn
 
 The wind comes from the east, so it pushes the vessel west (east < 0) and gives a force to port (wind_Y < 0). The current pushes it north. The thrusters push back.
 
-Every run gets its own folder, `results/<YYYYMMDD_HHMMSS>[_name]/`, with one CSV per FMU and a copy of the
-config it was run with. Earlier runs are never overwritten.
+Every run gets its own folder, `results/<YYYYMMDD_HHMMSS>[_name]/`, with one CSV per FMU, the real time the
+run took (`real_time.csv`: real time per simulated time) and a copy of the config it was run with. Earlier
+runs are never overwritten.
 
 **Try it** (no rebuild needed, only `python -m ospfmusim.run` again, or use the [results app](#results-app)):
 - Set `duration = 20.0` in `[simulation]` and look at `vessel_*.csv` in the new run folder (longer runs stop at 41.5 s, see the known issue above).
@@ -138,7 +139,7 @@ Every FMU gets the same copy of the model folders of `src/ospfmusim` in its `res
 | `src/ospfmusim/hull/vessel.py` | VesselBlock FMU. Thin wrapper around `hull/helpfunctions/` | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/observer/ekf/ekf.py` | ExtendedKalmanFilter FMU, everything in one file | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/controller/dp_controller.py` | DPController FMU, everything in one file | When the logic changes. Rebuilt by itself. |
-| `src/ospfmusim/thruster/` | Thin wrappers around `thruster/helpfunctions/`: the ThrustAllocation FMU (`thrust_allocation.py`) and the ThrusterDynamics FMU (`thruster_dynamics.py`). Two FMUs to swap in for ThrusterDynamics and compare: ThrusterDynamicsKtKq (`thruster_dynamics_ktkq.py`), with the thrust from KT/KQ propeller curves, see [docs/thruster_fmus.md](docs/thruster_fmus.md) §4.1, and ThrusterDynamicsDucted (`thruster_dynamics_ducted.py`), with the curves from the Ka 4-70 / nozzle 19A ducted series, set by `rated_rpm`, `c_t` and `c_q`, see [docs/thruster_fmus.md](docs/thruster_fmus.md) §4.2 | When the logic changes. Rebuilt by itself. |
+| `src/ospfmusim/thruster/` | Thin wrappers around `thruster/helpfunctions/`: the ThrustAllocation FMU (`thrust_allocation.py`) and the ThrusterDynamics FMU (`thruster_dynamics.py`). `[allocation] propeller_curves` in the config chooses where its KT and KQ come from: none, the `open_water` table, or the Ka 4-70 / nozzle 19A ducted series, set by `rated_rpm`, `c_t` and `c_q`. See [docs/thruster_fmus.md](docs/thruster_fmus.md) §4.1 and §4.2 | When the logic changes. Rebuilt by itself. |
 | `src/ospfmusim/*/helpfunctions/` | The wave, vessel and thruster logic. Built into every FMU's `resources/` | When the logic changes. Rebuilt by itself. |
 | `tests/` | The pytest tests: one `test_*.py` per part (environment, waves, vessel, Kalman filter, controller, thrusters). Most run the FMU classes directly in Python, without OSP; `test_vessel_fmu.py` runs the built VesselBlock FMU | When that logic changes |
 | `src/ospfmusim/build.py` | `build_fmus()`: builds the FMUs the system structure uses into `src/ospfmusim/fmus/`, only those that have changed | When an FMU is added |
@@ -151,7 +152,7 @@ Every FMU gets the same copy of the model folders of `src/ospfmusim` in its `res
 | `pyproject.toml` | The package: name, license, `pip install -e .` (the dependencies are read from `requirements.txt`), the test libraries (`[test]`) and the pytest settings | Rarely |
 | `requirements.txt` | The Python libraries the simulation needs, with the versions allowed | When a library is added |
 | `src/ospfmusim/fmus/` | The built FMUs | Created by `build.py` |
-| `results/` | One folder per run: one CSV file per FMU with every input and output for each time step, and the run's `config.toml` and `OspSystemStructure.xml` | Created by `run.py` |
+| `results/` | One folder per run: one CSV file per FMU with every input and output for each time step, the real time per step (`real_time.csv`), and the run's `config.toml` and `OspSystemStructure.xml` | Created by `run.py` |
 
 ## How it fits together
 
@@ -176,7 +177,7 @@ Step by step, when you run `run_simulation()` or `python -m ospfmusim.run`:
 3. **The system is loaded.** libcosim reads `OspSystemStructure.xml` and loads every FMU. `config_path` on each FMU is pointed to the run's copy of the config.
 4. **The FMUs read the config file.** Right before the simulation starts, each FMU runs `exit_initialization_mode()` and takes what it needs from the config (see the table at the top of the config file).
 5. **The simulation runs.** Every time step (0.1 s), each FMU runs `do_step()`, and libcosim passes the outputs to the inputs through the `<VariableConnection>`s.
-6. **The results are saved** in the run folder (one CSV per FMU). `run_simulation()` returns the run folder, and `python -m ospfmusim.run` prints the last values.
+6. **The results are saved** in the run folder (one CSV per FMU, and `real_time.csv`). `run_simulation()` returns the run folder, and `python -m ospfmusim.run` prints the last values.
 
 ### Frames and angle conventions
 

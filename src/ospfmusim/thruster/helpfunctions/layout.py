@@ -24,6 +24,10 @@ import numpy as np
 
 # "azimuth" covers anything that can turn its thrust in any direction (pods too).
 KINDS = ("azimuth", "tunnel", "shaft_line")
+# Where ThrusterDynamics gets KT and KQ from (dynamics.py).
+PROPELLER_CURVES = ("none", "open_water", "ducted_series")
+# How ThrustAllocator finds the thruster forces (allocation.py).
+ALLOCATION_METHODS = ("linear_program", "pseudo_inverse")
 
 
 @dataclass(frozen=True)
@@ -55,18 +59,18 @@ class Thruster:
     # Dynamics (dynamics.py). None: the thruster follows its command at once.
     thrust_time_constant: float | None = None  # first-order lag of the thrust [s]
     max_azimuth_rate: float | None = None  # fastest an azimuth turns [deg/s]
-    # Open-water propeller curves, only used by the ThrusterDynamicsKtKq FMU
-    # (dynamics_ktkq.py): (J, KT, KQ) rows, J
+    # Open-water propeller curves, used with propeller_curves = "open_water"
+    # (dynamics.py): (J, KT, KQ) rows, J
     # increasing and covering J = 0, interpolated linearly. Two rows give the
     # linear model KT = KT0 - alpha_T1*J of Sørensen (2018) (8.10). Needs
     # diameter. Empty: thrust follows the command, power P_B * r^1.5.
     open_water: tuple[tuple[float, float, float], ...] = ()
     wake_fraction: float = 0.0  # w in Va = (1 - w) * speed through the water (8.12)
-    # Ducted propeller series, only used by the ThrusterDynamicsDucted FMU
-    # (dynamics_ducted.py): KT and KQ of the
+    # Ducted propeller series, used with propeller_curves = "ducted_series"
+    # (dynamics.py): KT and KQ of the
     # Wageningen Ka 4-70 propeller in nozzle 19A, with P/D chosen so the unit
     # absorbs power_kw at rated_rpm in bollard pull. Needs diameter and
-    # power_kw. None: open_water as in ThrusterDynamicsKtKq.
+    # power_kw. None: open_water instead.
     rated_rpm: float | None = None
     c_t: float = 1.0  # scale on the series KT, fitted to bollard pull or thrust data
     c_q: float = 1.0  # scale on the series KQ, fitted to logged shaft power
@@ -130,7 +134,7 @@ class PowerSource:
 
 @dataclass(frozen=True)
 class Layout:
-    """Everything the allocation needs to know about the vessel's thrusters."""
+    """Everything the thruster FMUs need to know about the vessel's thrusters."""
 
     thrusters: tuple[Thruster, ...]
     power_sources: tuple[PowerSource, ...] | None = None  # None: no power limit
@@ -142,11 +146,21 @@ class Layout:
     tau_weights: tuple[float, float, float] = (1.0, 1.0, 1.0)
     # False: the allocation is switched off and every thrust command is 0.
     enabled: bool = True
+    # Where ThrusterDynamics gets KT and KQ from, one of PROPELLER_CURVES. The
+    # allocation doesn't use it: it always counts on the commanded thrust.
+    propeller_curves: str = "open_water"
+    # How the allocation finds the thruster forces, one of ALLOCATION_METHODS.
+    method: str = "linear_program"
 
     def __post_init__(self):
         if len(self.tau_weights) != 3 or min(self.tau_weights) < 0:
             raise ValueError("tau_weights must be three numbers >= 0 (X, Y, N), "
                              f"got {self.tau_weights}")
+        if self.propeller_curves not in PROPELLER_CURVES:
+            raise ValueError(f"propeller_curves must be one of {PROPELLER_CURVES}, "
+                             f"got {self.propeller_curves!r}")
+        if self.method not in ALLOCATION_METHODS:
+            raise ValueError(f"method must be one of {ALLOCATION_METHODS}, got {self.method!r}")
 
 
 def _tuples(value):
@@ -172,6 +186,8 @@ def load_layout(path):
         [allocation]
         enabled = true
         flushing_sectors = true
+        propeller_curves = "open_water"
+        method = "pseudo_inverse"
 
         [[power_sources]]
         name = "SWBD 1"
@@ -207,7 +223,8 @@ def load_layout(path):
         sources = tuple(_build(PowerSource, s, f"{path}, power source {k}")
                         for k, s in enumerate(sources))
     allocation = data.get("allocation", {})
-    unknown = set(allocation) - {"enabled", "flushing_sectors", "tau_weights"}
+    unknown = set(allocation) - {"enabled", "flushing_sectors", "tau_weights", "propeller_curves",
+                                 "method"}
     if unknown:
         raise ValueError(f"{path}: unknown keys in [allocation]: {sorted(unknown)}")
     for key in ("enabled", "flushing_sectors"):

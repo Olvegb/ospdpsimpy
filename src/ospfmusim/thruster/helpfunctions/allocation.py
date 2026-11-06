@@ -3,9 +3,13 @@ Thrust allocation: thruster forces that give a commanded force tau.
 
 allocate() allocates one tau (static). ThrustAllocator does it once per time
 step: it gives the closest reachable tau when the command is out of reach,
-leaves out unavailable thrusters, and holds idle azimuths' angles.
+leaves out unavailable thrusters, and holds idle azimuths' angles. Layout.method
+chooses how it finds the forces: linear programs, or the pseudo-inverse (the
+section "Pseudo-inverse" below; much faster, but it gives up heading like
+everything else when saturated).
 
-Copied from the DNV-ST-0111 project (dp_capability/models/thruster_allocation.py).
+The linear programs are copied from the DNV-ST-0111 project
+(dp_capability/models/thruster_allocation.py).
 The polygon and LP machinery is unchanged: it only assumes a right-handed
 frame, so it works as it is in the Fossen frame (layout.py). What changed:
 - the thrusters give tau itself (the DNV version balanced an environmental
@@ -19,9 +23,10 @@ Authors: William Boland, Olve Grønås Birkeland (2026)
 """
 from dataclasses import dataclass, replace
 from itertools import product
+from math import inf
 
 import numpy as np
-from scipy.optimize import linprog
+from scipy.optimize._highspy import _core as highs
 
 from .power import supply_matrix, thruster_power_kw, usable_power_kw
 from .zones import allowed_arcs, forbidden_zones
@@ -37,6 +42,10 @@ POWER_STEP = 0.05
 # error weights (Layout.tau_weights): small, so it only picks among forces
 # with the same error.
 THRUST_COST = 1e-6
+# The pseudo-inverse's search for the largest part of a tau out of reach: halving
+# on a log scale from SCALE_MIN to 1, which ends within about 0.03 % at any size.
+SCALE_ROUNDS = 16
+SCALE_MIN = 1e-9
 
 
 @dataclass(frozen=True)
@@ -228,13 +237,38 @@ def _size_rows(thruster, n_sides):
 
 
 def _solve(c, a_ub, b_ub, a_eq, b_eq, bounds):
-    """linprog with HiGHS. Returns the solution, or None if the constraints cannot be met."""
-    result = linprog(c, A_ub=a_ub, b_ub=b_ub, A_eq=a_eq, b_eq=b_eq, bounds=bounds, method="highs")
-    if result.status == 2:
+    """
+    Minimises c . x with a_ub x <= b_ub, a_eq x = b_eq and bounds on x, with
+    HiGHS. Returns the solution, or None if the constraints cannot be met.
+    """
+    # ponytail: scipy's private binding to HiGHS, because linprog around the same
+    # solver takes half of the allocation's time. Same answers, bit for bit
+    # (tests/test_thrusters.py). If a scipy upgrade moves it, use the highspy
+    # package, which has the same calls, or go back to linprog.
+    a = np.vstack([a_ub, a_eq])
+    columns, rows = np.nonzero(a.T)              # column by column, as HiGHS wants it
+    lp = highs.HighsLp()
+    lp.num_row_, lp.num_col_ = lp.a_matrix_.num_row_, lp.a_matrix_.num_col_ = a.shape
+    lp.col_cost_ = c
+    lp.col_lower_ = [-inf if low is None else low for low, _ in bounds]
+    lp.col_upper_ = [inf if high is None else high for _, high in bounds]
+    lp.row_lower_ = np.r_[np.full(len(b_ub), -inf), b_eq]
+    lp.row_upper_ = np.r_[b_ub, b_eq]
+    lp.a_matrix_.format_ = highs.MatrixFormat.kColwise
+    lp.a_matrix_.start_ = np.searchsorted(columns, np.arange(a.shape[1] + 1))
+    lp.a_matrix_.index_ = rows
+    lp.a_matrix_.value_ = a[rows, columns]
+    solver = highs._Highs()
+    solver.setOptionValue("output_flag", False)
+    solver.setOptionValue("threads", 1)          # these small LPs gain nothing from more
+    solver.passModel(lp)
+    solver.run()
+    status = solver.getModelStatus()
+    if status == highs.HighsModelStatus.kInfeasible:
         return None
-    if result.status != 0:
-        raise RuntimeError(f"thrust allocation LP failed: {result.message}")
-    return result.x
+    if status != highs.HighsModelStatus.kOptimal:
+        raise RuntimeError(f"thrust allocation LP failed: {solver.modelStatusToString(status)}")
+    return np.array(solver.getSolution().col_value)
 
 
 def _place(blocks, n):
@@ -494,9 +528,8 @@ def _best(thrusters, tau, s):
     return best, best_u
 
 
-def _allocation(thrusters, p, utilisation, fx, fy, shares):
-    """The Allocation for the forces fx, fy found in problem p."""
-    r = _thrust_fractions(p, fx, fy)
+def _allocation(thrusters, r, utilisation, fx, fy, shares):
+    """The Allocation for the forces fx, fy, with thrust fractions r."""
     power_kw = np.array([np.nan if t.power_kw is None else thruster_power_kw(t, ri)
                          for t, ri in zip(thrusters, r)])
     return Allocation(fx, fy, utilisation, r, power_kw, shares @ power_kw)
@@ -518,7 +551,8 @@ def _allocate_step(thrusters, tau, s, weights):
                 best, fx, fy, cost = p, fx_p, fy_p, cost_p
     else:
         fx, fy = _least_total_thrust(best, best_u)
-    return _allocation(thrusters, best, best_u, fx, fy, s.shares), saturated
+    r = _thrust_fractions(best, fx, fy)
+    return _allocation(thrusters, r, best_u, fx, fy, s.shares), saturated
 
 
 def allocate(thrusters, tau, n_sides=36, flushing=False, power_sources=None):
@@ -591,7 +625,219 @@ def allocate(thrusters, tau, n_sides=36, flushing=False, power_sources=None):
         nan = np.full(len(thrusters), np.nan)
         return Allocation(nan, nan, np.inf, nan, nan, np.full(len(s.shares), np.nan))
     fx, fy = _least_total_thrust(best, best_u)
-    return _allocation(thrusters, best, best_u, fx, fy, s.shares)
+    return _allocation(thrusters, _thrust_fractions(best, fx, fy), best_u, fx, fy, s.shares)
+
+
+# Pseudo-inverse. tau = B z is linear in the force components, and the z with the
+# lowest sum (f_i / max_thrust_i)^2 is S pinv(B S) tau, S = diag(max_thrust). One
+# matrix product, but it knows no limits: the functions below add them.
+
+
+def _tau_of(thrusters, fx, fy):
+    """(X, Y, N) the forces give."""
+    x = np.array([t.x for t in thrusters])
+    y = np.array([t.y for t in thrusters])
+    return np.array([fx.sum(), fy.sum(), (x * fy - y * fx).sum()])
+
+
+def _short(achieved, target):
+    """True if achieved misses target by more than TOLERANCE of target's largest term."""
+    return np.abs(achieved - target).max() > TOLERANCE * max(1.0, np.abs(target).max())
+
+
+def _fractions(thrusters, fx, fy):
+    """Each thruster's thrust as a fraction of its largest thrust in that direction."""
+    return np.array([np.hypot(a, b) / (t.max_thrust if t.kind == "azimuth" or a + b >= 0
+                                       else t.reverse_thrust)
+                     for t, a, b in zip(thrusters, fx, fy)])
+
+
+def _directions(thrusters):
+    """Each thruster's fixed thrust direction [deg]; nan for an azimuth, which is free."""
+    return np.array([np.nan if t.kind == "azimuth" else 90.0 if t.kind == "tunnel" else 0.0
+                     for t in thrusters])
+
+
+def _sizes(thrusters):
+    """S, the diagonal of it, for the two entries of each thruster in z."""
+    return np.array([t.max_thrust for t in thrusters] * 2)
+
+
+def _columns(thrusters, fixed, zones):
+    """
+    B in tau = B z, and the limits on each thruster's thrust. z has two entries
+    per thruster: (fx_i, fy_i) for a free azimuth; with a direction fixed[i],
+    the signed thrust along it, and a second entry that stays 0.
+    """
+    n = len(thrusters)
+    b, low, high = np.zeros((3, 2 * n)), np.zeros(n), np.zeros(n)
+    for i, t in enumerate(thrusters):
+        high[i] = t.max_thrust
+        if np.isnan(fixed[i]):
+            b[:, i] = 1.0, 0.0, -t.y
+            b[:, n + i] = 0.0, 1.0, t.x
+            continue
+        a = np.deg2rad(fixed[i])
+        b[:, i] = np.cos(a), np.sin(a), t.x * np.sin(a) - t.y * np.cos(a)
+        if t.kind != "azimuth":
+            # A direction inside a forbidden zone is not available at all.
+            high[i] = 0.0 if _inside(fixed[i], zones[i]) else t.max_thrust
+            low[i] = 0.0 if _inside(fixed[i] + 180.0, zones[i]) else -t.reverse_thrust
+    return b, low, high
+
+
+def _redistribute(thrusters, tau, fixed, on, zones):
+    """
+    The pseudo-inverse within the thrust limits, using only the thrusters in on:
+    thrusters over their limit are clipped and stay there, and the others solve
+    again for the rest of tau, until none is over. Returns fx, fy, which fall
+    short of tau if there aren't enough thrusters left to give it.
+    """
+    n = len(thrusters)
+    free = np.isnan(fixed)
+    b, low, high = _columns(thrusters, fixed, zones)
+    sizes = _sizes(thrusters)
+    active = np.r_[on, on & free]
+    z = np.zeros(2 * n)
+    while active.any():
+        s = sizes * active
+        z = np.where(active, s * (np.linalg.pinv(b * s) @ (tau - b @ (z * ~active))), z)
+        thrust = np.where(free, np.hypot(z[:n], z[n:]), z[:n])
+        clipped = np.clip(thrust, low, high)
+        over = active[:n] & (np.abs(thrust - clipped) > 1e-9 * sizes[:n])
+        if not over.any():
+            break
+        # Both entries by the same factor, so a clipped azimuth keeps its direction.
+        z *= np.tile(np.divide(clipped, thrust, out=np.ones(n), where=over), 2)
+        active &= ~np.r_[over, over]
+    a = np.deg2rad(np.nan_to_num(fixed))
+    fx = np.where(free, z[:n], z[:n] * np.cos(a))
+    fy = np.where(free, z[n:], z[:n] * np.sin(a))
+    # Drop solver noise, so an idle thruster gets exactly zero force.
+    return np.where(np.abs(fx) < 1e-6, 0.0, fx), np.where(np.abs(fy) < 1e-6, 0.0, fy)
+
+
+def _outside_zones(thrusters, tau, on, zones):
+    """
+    _redistribute() with no azimuth in a forbidden zone: one that points into a
+    zone is fixed at the zone's nearest edge, and the others solve again.
+    """
+    fixed = _directions(thrusters)
+    while True:
+        fx, fy = _redistribute(thrusters, tau, fixed, on, zones)
+        angle = np.mod(np.rad2deg(np.arctan2(fy, fx)), 360.0)
+        moved = False
+        for i in np.flatnonzero(np.isnan(fixed) & ((fx != 0) | (fy != 0))):
+            for start, end in zones[i]:
+                if _inside(angle[i], [(start, end)]):
+                    nearest = (angle[i] - start) % 360.0 < (end - angle[i]) % 360.0
+                    fixed[i] = start if nearest else end
+                    moved = True
+        if not moved:
+            return fx, fy
+
+
+def _largest_part(thrusters, tau, on, s, weights):
+    """
+    For a tau out of reach: the forces for the largest part of tau the thrusters
+    can give, found by halving. Returns fx, fy, the tau they give and the utilisation:
+    1 / that part, or inf if tau can't be given in any amount.
+
+    Redistributing alone would miss tau in any direction: pure sway gets a yaw
+    moment nobody asked for.
+    """
+    # ponytail: gives up X, Y and N alike, so unlike the linear programs it doesn't
+    # hold the heading first. To do that, search over (part * X, part * Y, N) first.
+    n = len(thrusters)
+    fixed = _directions(thrusters)
+    b = _columns(thrusters, fixed, s.zones)[0] * _sizes(thrusters) * np.r_[on, on & np.isnan(fixed)]
+    reach = tau
+    if _short(b @ np.linalg.pinv(b) @ tau, tau):
+        # No force at all along part of tau. The closest in the others, by tau_weights.
+        q = np.diag(weights)
+        reach = b @ np.linalg.pinv(q @ b) @ q @ tau
+    part = 1.0
+    fx, fy = _outside_zones(thrusters, reach, on, s.zones)
+    if _short(_tau_of(thrusters, fx, fy), reach):
+        part, fx, fy = 0.0, np.zeros(n), np.zeros(n)
+        low, high = SCALE_MIN, 1.0
+        for _ in range(SCALE_ROUNDS):
+            middle = np.sqrt(low * high)
+            fx_m, fy_m = _outside_zones(thrusters, middle * reach, on, s.zones)
+            if _short(_tau_of(thrusters, fx_m, fy_m), middle * reach):
+                high = middle
+            else:
+                part, low, fx, fy = middle, middle, fx_m, fy_m
+    utilisation = np.inf if reach is not tau or part == 0.0 else 1.0 / part
+    return fx, fy, part * reach, utilisation
+
+
+def _power_scale(thrusters, fx, fy, s):
+    """
+    What the power sources ask of the forces fx, fy. Returns the factor on all the
+    forces that keeps them within the usable power, and the largest source power as
+    a fraction of its usable power (0 without sources). P ~ r^1.5, so the factor is
+    exact.
+    """
+    # ponytail: scales every thruster, also those on sources with power to spare. To
+    # move the load over to those instead, it takes the linear programs.
+    if s.power is None:
+        return 1.0, 0.0
+    demand = s.power.shares @ (s.power.p_b * _fractions(thrusters, fx, fy) ** 1.5)
+    usable = s.power.usable
+    k = np.max(np.divide(demand, usable, out=np.where(demand > 0, np.inf, 0.0), where=usable > 0),
+               initial=0.0)
+    return (k ** (-2 / 3) if k > 1 + TOLERANCE else 1.0), k
+
+
+def _pinv_step(thrusters, tau, s, available, weights):
+    """
+    One time step's allocation by pseudo-inverse with the azimuths free. Returns
+    (Allocation, saturated, the tau the forces give).
+    """
+    # With every direction forbidden a thruster gives no force at all.
+    on = np.array(available) & np.array([bool(allowed_arcs(z)) for z in s.zones])
+    fx, fy = _outside_zones(thrusters, tau, on, s.zones)
+    target, utilisation = tau, None
+    saturated = _short(_tau_of(thrusters, fx, fy), tau)
+    if saturated:
+        fx, fy, target, utilisation = _largest_part(thrusters, tau, on, s, weights)
+    scale, power = _power_scale(thrusters, fx, fy, s)
+    fx, fy, target = scale * fx, scale * fy, scale * target
+    saturated = saturated or power > 1 + TOLERANCE
+    r = _fractions(thrusters, fx, fy)
+    utilisation = max(r.max() if utilisation is None else utilisation, power)
+    return _allocation(thrusters, r, utilisation, fx, fy, s.shares), saturated, target
+
+
+def _pinv_held(thrusters, target, allocation, angle_deg, s, available):
+    """
+    The forces for the azimuths at angle_deg, where they can point this step: each
+    gives the part of its free force along that angle (none inside a forbidden zone),
+    and the tunnels and shaft lines solve for the rest. Returns (Allocation, short).
+
+    Solving for the azimuths' thrust at these angles instead blows up: nearly
+    parallel azimuths then push hard against each other, up to 77 kN wrong on the
+    Gunnerus for a command of 30 kN.
+    """
+    # ponytail: during a big turn, sway can miss by more than with the linear programs.
+    # scipy.optimize.lsq_linear on the azimuths too about halves that, and takes up to
+    # about 6x the time.
+    a = np.deg2rad(angle_deg)
+    cos, sin = np.cos(a), np.sin(a)
+    azimuth = np.array([t.kind == "azimuth" for t in thrusters])
+    top = np.array([0.0 if _inside(d, z) else t.max_thrust
+                    for t, d, z in zip(thrusters, angle_deg, s.zones)])
+    thrust = np.where(azimuth, np.clip(allocation.fx * cos + allocation.fy * sin, 0.0, top), 0.0)
+    rest = target - _tau_of(thrusters, thrust * cos, thrust * sin)
+    fx, fy = _redistribute(thrusters, rest, _directions(thrusters), np.array(available) & ~azimuth,
+                           s.zones)
+    fx, fy = fx + thrust * cos, fy + thrust * sin
+    scale, _ = _power_scale(thrusters, fx, fy, s)
+    fx, fy = scale * fx, scale * fy
+    r = _fractions(thrusters, fx, fy)
+    held = _allocation(thrusters, r, allocation.utilisation, fx, fy, s.shares)
+    return held, _short(_tau_of(thrusters, fx, fy), target)
 
 
 @dataclass(frozen=True)
@@ -643,6 +889,12 @@ class ThrustAllocator:
 
     The convex pieces of each set of available thrusters are worked out once
     and kept.
+
+    With Layout.method = "pseudo_inverse" the two passes and the saturation pass
+    are replaced by the pseudo-inverse with its limits (_pinv_step), and the
+    second allocation of a turn by _pinv_held. A command out of reach then keeps
+    its direction: tau_weights only counts where tau has a part no thruster can
+    push along. The rest of this class works the same for both.
     """
 
     def __init__(self, layout, n_sides=36):
@@ -682,7 +934,11 @@ class ThrustAllocator:
                 available)
         s = self._setups[available]
         weights = np.asarray(self.layout.tau_weights, dtype=float)
-        allocation, saturated = _allocate_step(thrusters, tau, s, weights)
+        pseudo_inverse = self.layout.method == "pseudo_inverse"
+        if pseudo_inverse:
+            allocation, saturated, target = _pinv_step(thrusters, tau, s, available, weights)
+        else:
+            allocation, saturated = _allocate_step(thrusters, tau, s, weights)
         turn_limited = False
 
         kinds = [t.kind for t in thrusters]
@@ -698,10 +954,14 @@ class ThrustAllocator:
             angle = (self._angle + np.clip(error, -reach, reach)) % 360.0
             if np.any(np.abs(error) > reach):
                 # One can't get there yet: allocate again with the azimuths where they can be.
-                options = [[_held_at(t, a, s.zones[i])] if azimuth[i] and available[i]
-                           else s.options[i]
-                           for i, (t, a) in enumerate(zip(thrusters, angle))]
-                held, short = _allocate_step(thrusters, tau, replace(s, options=options), weights)
+                if pseudo_inverse:
+                    held, short = _pinv_held(thrusters, target, allocation, angle, s, available)
+                else:
+                    options = [[_held_at(t, a, s.zones[i])] if azimuth[i] and available[i]
+                               else s.options[i]
+                               for i, (t, a) in enumerate(zip(thrusters, angle))]
+                    held, short = _allocate_step(thrusters, tau, replace(s, options=options),
+                                                 weights)
                 # Short only because of the turn is turn_limited, not saturated. The
                 # utilisation stays that of the free azimuths, the thrust and power demand.
                 turn_limited = short and not saturated
@@ -709,9 +969,7 @@ class ThrustAllocator:
         self._angle = angle
 
         fx, fy = allocation.fx, allocation.fy
-        x = np.array([t.x for t in thrusters])
-        y = np.array([t.y for t in thrusters])
         thrust = np.where([k == "tunnel" for k in kinds], fy,
                           np.where([k == "shaft_line" for k in kinds], fx, np.hypot(fx, fy)))
-        achieved = np.array([fx.sum(), fy.sum(), (x * fy - y * fx).sum()])
+        achieved = _tau_of(thrusters, fx, fy)
         return Command(thrust, self._angle.copy(), achieved, saturated, turn_limited, allocation)

@@ -270,9 +270,23 @@ wave_motion_std = [0.5, 0.5, 0.01]              # expected std of the WF motion 
 [allocation]
 enabled = true                  # false: every thrust command is 0, the vessel drifts
 flushing_sectors = true         # add the DNV-ST-0111 [3.11.3] flushing sectors (needs diameter)
+# How the thruster forces are found:
+#   "linear_program"  the lowest load on the worst thruster; when saturated it
+#                     gives up sway or surge before heading (tau_weights)
+#   "pseudo_inverse"  the lowest sum of squared loads; much faster and less power,
+#                     but when saturated it gives up X, Y and N alike
+# To compare, run once with each value.
+method = "pseudo_inverse"
 # When the command is more than the thrusters can give: cost per N of error
-# in X and Y, and per Nm in N. Equal weights keep the heading first.
+# in X and Y, and per Nm in N. Equal weights keep the heading first. With
+# "pseudo_inverse" only for a part of tau no thruster can push along.
 tau_weights = [1.0, 1.0, 1.0]
+# Where ThrusterDynamics gets KT and KQ from, for every thruster:
+#   "none"           no curves: the thrust on the vessel is the lagged command
+#   "open_water"     the thruster's open_water table; loses thrust with speed
+#   "ducted_series"  Ka 4-70 / nozzle 19A from rated_rpm; without rated_rpm as "open_water"
+# A thruster without the data has no curves. To compare, run once with each value.
+propeller_curves = "open_water"
 
 
 # Switchboards. Leave out every [[power_sources]] for no power limit.
@@ -303,8 +317,8 @@ power_kw = 500.0               # power at max_thrust [kW]
 power_supply = [["SWBD 1", 1.0]]
 thrust_time_constant = 5.0      # first-order lag of the thrust [s]
 max_azimuth_rate = 12.0         # fastest it turns [deg/s]
-# Open-water curves [[J, KT, KQ], ...], interpolated linearly. Only used by the
-# ThrusterDynamicsKtKq FMU; ThrusterDynamics ignores them. Gunnerus PMAZM
+# Open-water curves [[J, KT, KQ], ...], interpolated linearly. Only used with
+# propeller_curves = "open_water". Gunnerus PMAZM
 # ducted azimuth at 0 deg azimuth (Rolls-Royce model, labelled P/D 1.4), from
 # PMAzimuth.fmu in the OSP demo-cases (MIT), sampled every 0.1 in J from the
 # polynomials in data_examples/Gunnerus_PMAZM_KT_KQ.xlsx. KT is propeller +
@@ -317,8 +331,8 @@ open_water = [
     [0.9, 0.290, 0.0688], [1.0, 0.238, 0.0637], [1.1, 0.184, 0.0577],
     [1.2, 0.128, 0.0508],
 ]
-# Ka 4-70 / nozzle 19A ducted series, only used by the ThrusterDynamicsDucted
-# FMU. P/D is set so the unit absorbs power_kw at rated_rpm in bollard pull.
+# Ka 4-70 / nozzle 19A ducted series, only used with propeller_curves =
+# "ducted_series". P/D is set so the unit absorbs power_kw at rated_rpm in bollard pull.
 # 198 rpm is NOT measured: it is what the PMAZM KQ0 above gives at 500 kW
 # (P/D 1.36, KT0 0.83 in the series). Replace it with the rated rpm from the data.
 rated_rpm = 198.0

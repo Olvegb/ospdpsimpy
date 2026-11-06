@@ -55,6 +55,8 @@ CHOICES = {
     ("waves", "sea_type"): ["regular", "irregular"],
     ("waves.spectrum", "type"): ["jonswap", "pierson_moskowitz"],
     ("waves.spreading", "type"): ["none", "cos2s"],
+    ("allocation", "propeller_curves"): ["none", "open_water", "ducted_series"],
+    ("allocation", "method"): ["linear_program", "pseudo_inverse"],
 }
 
 

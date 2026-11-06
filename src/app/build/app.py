@@ -141,7 +141,8 @@ R = results.get                                 # short name: R("vessel") -> Dat
 # Only from the run's own config: the default config says nothing about a run without a copy.
 pin_test = config_path is not None and config.get("simulation", {}).get("pin_test", False)
 tabs = st.tabs(["New run", "Overview", "Vessel", "Environment", "Kalman filter",
-               "Control and thrusters", "Thrusters", "Data"] + (["Pin test"] if pin_test else []))
+               "Control and thrusters", "Thrusters", "Data", "Real time"]
+               + (["Pin test"] if pin_test else []))
 
 with tabs[0]:
     editor.render()
@@ -443,6 +444,30 @@ with tabs[7]:
         st.dataframe(table, width="stretch", height=300)
         st.download_button("Download as CSV", table.to_csv().encode("utf-8"),
                            file_name="signals.csv", mime="text/csv")
+
+# --- Real time -------------------------------------------------------
+with tabs[8]:
+    st.header("Real time")
+    real_time = R("real_time")
+    if real_time is None or len(real_time) < 2:
+        missing("real_time")
+    else:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Simulated time", f"{real_time.index[-1]:,.1f} s")
+        c2.metric("Real time", f"{real_time['real_time_s'].iloc[-1]:,.1f} s")
+        c3.metric("Loading the FMUs", f"{real_time['real_time_s'].iloc[0]:,.1f} s")
+        c4.metric("Real-time factor", f"{data.real_time_factor(real_time):,.2f}",
+                  help="Simulated seconds per real second while stepping. Above 1 is faster than "
+                       "real time.")
+        simulated = pd.Series(real_time.index, index=real_time.index)
+        show(line_plot([("Real time", real_time["real_time_s"]), ("Simulated time", simulated)],
+                       "Real time against simulated time (below the simulated time: faster than "
+                       "real time)", "[s]", height=380))
+        show(line_plot([("Step", real_time["step_time_s"].iloc[1:] * 1e3)],
+                       "Real time per step (the first step also initializes the FMUs)", "[ms]"))
+        st.download_button("Download the real-time vector as CSV",
+                           real_time.to_csv().encode("utf-8"), file_name=data.REAL_TIME_FILE,
+                           mime="text/csv")
 
 # --- Pin test --------------------------------------------------------
 if pin_test:

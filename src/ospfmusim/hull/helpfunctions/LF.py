@@ -172,10 +172,18 @@ def coriolis(mass, velocity):
 
     p = skew(momentum[:3])
     h = skew(momentum[3:])
+    matrix = np.zeros((6, 6))
+    matrix[:3, 3:] = matrix[3:, :3] = -p
+    matrix[3:, 3:] = -h
+    return matrix
 
-    return np.block([
-        [np.zeros((3, 3)), -p],
-        [-p, -h],
+
+def cross(a, b):
+    """Fast 3D cross product, equivalent to np.cross for 3-element vectors."""
+    return np.array([
+        a[1]*b[2] - a[2]*b[1],
+        a[2]*b[0] - a[0]*b[2],
+        a[0]*b[1] - a[1]*b[0],
     ])
 
 
@@ -718,13 +726,13 @@ class LF:
 
         current_body = rotation(eta[3:]).T @ current_ned
 
-        nu_c = np.r_[current_body, np.zeros(3)]
+        nu_c = np.concatenate((current_body, np.zeros(3)))
         nu_r = nu - nu_c
 
-        nu_c_dot = np.r_[
-            -np.cross(nu[3:], current_body),
+        nu_c_dot = np.concatenate((
+            -cross(nu[3:], current_body),
             np.zeros(3),
-        ]
+        ))
 
         # Coriolis and centripetal contributions.
         rigid_coriolis = coriolis(self.M_RB, nu) @ nu
@@ -746,7 +754,7 @@ class LF:
         # Body-frame accelerations.
         nu_dot = np.linalg.solve(self.M, net_load)
 
-        return np.r_[eta_dot, nu_dot]
+        return np.concatenate((eta_dot, nu_dot))
 
     # ---------------------------------------------------------------
     # 8. RK4 INTEGRATION WITH DIAGNOSTICS

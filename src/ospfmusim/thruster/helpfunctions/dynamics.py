@@ -5,14 +5,57 @@ The commands are those of allocation.ThrustAllocator: a thrust T [N] along
 a direction alpha [deg] (layout.py), alpha fixed at 90 deg for tunnels and
 0 deg for shaft lines. Every kind then pushes with f = T * (cos alpha, sin alpha).
 
+[allocation] propeller_curves in the config chooses where KT(J) and KQ(J) come
+from, and so how the thrust on the vessel follows from the lagged thrust:
+
+  "none"           No curves: the thrust on the vessel is the lagged thrust.
+  "open_water"     The thruster's open_water table.
+  "ducted_series"  The Wageningen Ka 4-70 propeller in nozzle 19A (Oosterveld
+                   1973), for a thruster with rated_rpm:
+                     1. P/D is chosen so the unit absorbs power_kw at rated_rpm
+                        in bollard pull, KQ0 = P / (2 pi rho n^3 D^5). No blade
+                        geometry is needed.
+                     2. c_t and c_q scale KT and KQ. Fitted to vessel data, they
+                        absorb what the series does not represent (rim drive,
+                        stators, custom duct, scale effects). For a vessel
+                        without data, leave them at 1.
+                   The series is valid for 0.6 <= P/D <= 1.4 and
+                   0 <= J <= J(KT = 0): the first quadrant.
+
+A thruster without the data falls back: "ducted_series" to its open_water table,
+and either of them to no curves.
+
 License: MIT (see LICENSE in the repository root)
 Authors: William Boland, Olve Grønås Birkeland (2026)
 """
+import math
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.optimize import brentq
 
 from .power import thruster_power_kw
+
+RHO = 1025.0  # density of sea water [kg/m^3]
+
+# Oosterveld polynomial coefficients for Ka 4-70 in nozzle 19A.
+# Keys are (x, y) = (power of P/D, power of J).
+KT_19A = {  # total thrust (propeller + duct)
+    (0, 0): +0.030550, (0, 1): -0.148687, (0, 3): -0.391137,
+    (1, 1): -0.432612,
+    (2, 0): +0.667657, (2, 2): +0.285076,
+    (3, 0): -0.172529,
+    (6, 1): -0.017283,
+}
+KQ_19A = {
+    (0, 0): +0.006735, (0, 2): -0.016306, (0, 4): -0.007244,
+    (1, 2): -0.024012,
+    (2, 2): +0.005193,
+    (3, 0): +0.046605,
+    (4, 0): -0.007366,
+    (6, 0): -0.001730, (6, 1): -0.000337, (6, 2): +0.000861,
+}
+PD_RANGE = (0.6, 1.4)  # P/D the series covers
 
 
 @dataclass(frozen=True)
@@ -24,7 +67,102 @@ class State:
     fx: np.ndarray  # surge force from each thruster [N]
     fy: np.ndarray  # sway force from each thruster [N], positive to starboard
     tau: np.ndarray  # (X, Y, N) on the vessel [N, N, Nm]
-    power_kw: np.ndarray  # power per thruster [kW], P_B * r^1.5; nan without power_kw
+    # Power per thruster [kW]: 2 pi n Qa with curves, else P_B * r^1.5; nan
+    # without curves and without power_kw.
+    power_kw: np.ndarray
+    shaft_speed: np.ndarray  # n [rps], signed like the thrust; 0 without curves
+    torque: np.ndarray  # propeller torque Qa [Nm], signed like n; 0 without curves
+
+
+def _poly(coeffs, j, pd):
+    return sum(c * pd**x * j**y for (x, y), c in coeffs.items())
+
+
+def pitch_ratio(thruster):
+    """P/D at which the series absorbs power_kw at rated_rpm in bollard pull (c_q = 1)."""
+    n = thruster.rated_rpm / 60
+    target = thruster.power_kw * 1e3 / (2 * math.pi * RHO * n**3 * thruster.diameter**5)
+    low, high = (_poly(KQ_19A, 0.0, pd) for pd in PD_RANGE)
+    if not low <= target <= high:
+        raise ValueError(f"{thruster.name}: KQ0 = {target:.4f} from power_kw and rated_rpm is "
+                         f"outside the Ka 4-70/19A series [{low:.4f}, {high:.4f}]. Check "
+                         "rated_rpm and power_kw.")
+    return brentq(lambda pd: _poly(KQ_19A, 0.0, pd) - target, *PD_RANGE)
+
+
+def ducted_curves(thruster):
+    """(KT(J), KQ(J)) of a thruster with rated_rpm, from the Ka 4-70/19A series."""
+    pd = pitch_ratio(thruster)
+    j0 = brentq(lambda j: _poly(KT_19A, j, pd), 0.0, 2.0)  # J where KT = 0
+
+    # ponytail: first quadrant only. J is held in [0, J0]: inflow from
+    # behind gives the bollard values, beyond J0 no thrust. Reverse thrust
+    # uses the same curve (propeller()), fine for azimuths that
+    # turn instead; add 4-quadrant data for tunnels or shaft lines.
+    def clip(j):
+        return min(max(j, 0.0), j0)
+
+    return (lambda j: thruster.c_t * _poly(KT_19A, clip(j), pd),
+            lambda j: thruster.c_q * _poly(KQ_19A, clip(j), pd))
+
+
+def curves(thruster, source):
+    """
+    (KT(J), KQ(J)) of a thruster for [allocation] propeller_curves = source, or
+    None: its thrust stays nominal. The open_water table is linear, with the
+    end values held outside the table.
+    """
+    if source == "ducted_series" and thruster.rated_rpm is not None:
+        return ducted_curves(thruster)
+    if source != "none" and thruster.open_water:
+        j, kt, kq = zip(*thruster.open_water)
+        return (lambda x: float(np.interp(x, j, kt)), lambda x: float(np.interp(x, j, kq)))
+    return None
+
+
+def propeller(thruster, nominal_thrust, speed, kt, kq):
+    """
+    Actual thrust, shaft speed and torque of a speed-controlled propeller
+    (Sørensen 2018, Marine Cybernetics, ch. 8).
+
+    The shaft speed n is the one that gives nominal_thrust at bollard pull,
+    Tn = rho D^4 KT0 n|n| (8.11a, 8.38): the thrust allocation's view. The
+    propeller advances at Va = (1 - w) * speed, signed along the thrust, so
+    J = Va / (|n| D) (8.6, 8.12), and
+
+        Ta = rho D^4 KT(J) n|n|,   Qa = rho D^5 KQ(J) n|n|   (8.3, 8.4)
+
+    Speed through the water lowers KT, so Ta < Tn: a thrust loss the DP
+    controller sees as a disturbance.
+
+    Parameters
+    ----------
+    thruster : layout.Thruster
+        With diameter.
+    nominal_thrust : float
+        Tn [N], signed.
+    speed : float
+        Speed of the thruster through the water along its direction of
+        positive thrust [m/s].
+    kt, kq : callable
+        KT(J) and KQ(J), from curves().
+
+    Returns
+    -------
+    tuple of float
+        Ta [N], n [rps], Qa [Nm], all signed like nominal_thrust.
+    """
+    # ponytail: ideal speed loop (n follows Tn at once, 8.9.7), one curve for
+    # both directions (no KT0r/KQ0r, 8.45), no ventilation or interaction
+    # losses (8.6). Add the shaft model (8.30) or reverse curves when the
+    # data is there.
+    d = thruster.diameter
+    n = math.copysign(math.sqrt(abs(nominal_thrust) / (RHO * d**4 * kt(0.0))), nominal_thrust)
+    if n == 0:
+        return 0.0, 0.0, 0.0
+    ja = (1 - thruster.wake_fraction) * speed / (n * d)  # Va / (|n| D), Va signed along the thrust
+    n2 = n * abs(n)
+    return RHO * d**4 * kt(ja) * n2, n, RHO * d**5 * kq(ja) * n2
 
 
 class ThrusterDynamics:
@@ -51,8 +189,14 @@ class ThrusterDynamics:
     An unavailable thruster (a breaker trip) has no thrust at once and
     doesn't turn.
 
-    Power: P = P_B * r^1.5 (power.thruster_power_kw), with r = |T| over the
-    largest thrust in that direction.
+    Propeller curves: for a thruster with curves(), the lagged thrust is the
+    nominal thrust Tn. propeller() then gives the thrust on the vessel Ta,
+    shaft speed, torque and power (2 pi n Qa), with the speed through the
+    water at the thruster from velocity. A thruster without curves pushes
+    with the lagged thrust.
+
+    Power without curves: P = P_B * r^1.5 (power.thruster_power_kw), with
+    r = |T| over the largest thrust in that direction.
     """
 
     def __init__(self, layout):
@@ -64,13 +208,17 @@ class ThrusterDynamics:
         self._high = np.array([t.max_thrust for t in self.thrusters])
         self._x = np.array([t.x for t in self.thrusters])
         self._y = np.array([t.y for t in self.thrusters])
+        self._curves = [curves(t, layout.propeller_curves) for t in self.thrusters]
         # Start at rest, azimuths pointing ahead (as ThrustAllocator assumes).
         self.thrust = np.zeros(len(kinds))
         self.azimuth_deg = np.array([90.0 if k == "tunnel" else 0.0 for k in kinds])
+        # (u_r, v_r, r): the vessel's velocity relative to the water in the
+        # body frame [m/s, m/s, rad/s]. Set it before step(). At rest: bollard pull.
+        self.velocity = (0.0, 0.0, 0.0)
 
     def step(self, thrust_cmd, azimuth_cmd_deg, available=None, dt=0.0):
         """
-        Move the thrusters dt seconds toward their commands.
+        Move the thrusters dt seconds toward their commands, with velocity as it is now.
 
         Parameters
         ----------
@@ -121,11 +269,23 @@ class ThrusterDynamics:
                   * np.maximum(np.cos(np.deg2rad(left)), 0.0))
         self.thrust = np.where(available, self.thrust + (target - self.thrust) * lag, 0.0)
 
-        alpha = np.deg2rad(self.azimuth_deg)
-        fx = self.thrust * np.cos(alpha)
-        fy = self.thrust * np.sin(alpha)
-        tau = np.array([fx.sum(), fy.sum(), (self._x * fy - self._y * fx).sum()])
         fraction = np.abs(self.thrust) / np.where(self.thrust >= 0, self._high, -self._low)
         power_kw = np.array([np.nan if t.power_kw is None else float(thruster_power_kw(t, r))
                              for t, r in zip(self.thrusters, fraction)])
-        return State(self.thrust.copy(), self.azimuth_deg.copy(), fx, fy, tau, power_kw)
+
+        alpha = np.deg2rad(self.azimuth_deg)
+        u_r, v_r, r = self.velocity
+        # Speed through the water at each thruster, along its positive thrust.
+        speed = (u_r - r * self._y) * np.cos(alpha) + (v_r + r * self._x) * np.sin(alpha)
+        thrust = self.thrust.copy()
+        shaft_speed, torque = np.zeros(n), np.zeros(n)
+        for i, (t, kt_kq) in enumerate(zip(self.thrusters, self._curves)):
+            if kt_kq:
+                thrust[i], shaft_speed[i], torque[i] = propeller(t, self.thrust[i], speed[i],
+                                                                 *kt_kq)
+                power_kw[i] = 2 * np.pi * shaft_speed[i] * torque[i] / 1000
+
+        fx = thrust * np.cos(alpha)
+        fy = thrust * np.sin(alpha)
+        tau = np.array([fx.sum(), fy.sum(), (self._x * fy - self._y * fx).sum()])
+        return State(thrust, self.azimuth_deg.copy(), fx, fy, tau, power_kw, shaft_speed, torque)

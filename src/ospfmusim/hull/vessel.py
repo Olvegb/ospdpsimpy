@@ -5,6 +5,7 @@ Authors: Araz, Olve Grønås Birkeland (2026)
 """
 import json
 import tomllib
+from operator import attrgetter
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,9 @@ POSE = ('north', 'east', 'down', 'roll', 'pitch', 'yaw')
 VELOCITY = ('u', 'v', 'w', 'p', 'q', 'r')
 LOADS = ('X', 'Y', 'Z', 'K', 'M', 'N')
 N_WAVES = 100
+WAVE_QUANTITIES = ('amplitude', 'omega', 'phase', 'direction_deg')
+WAVE_INPUTS = attrgetter(*(f'wave{k}_{quantity}' for quantity in WAVE_QUANTITIES
+                           for k in range(1, N_WAVES+1)))
 
 
 def read_table(data, kind):
@@ -50,6 +54,7 @@ class VesselBlock(Fmi2Slave):
         self.max_internal_step_s = MAX_INTERNAL_STEP_S
         self.time = 0.0
         self.ready = False
+        self.wave_inputs = None                  # the wave inputs of the last accept_waves()
         self.register_variable(String(
             'config_path', causality=Fmi2Causality.parameter, variability=Fmi2Variability.fixed,
             description='Path to shared config.toml. '
@@ -63,7 +68,7 @@ class VesselBlock(Fmi2Slave):
         for name in inputs:
             self.add_real(name, Fmi2Causality.input)
         for k in range(1, N_WAVES+1):
-            for quantity in ('amplitude', 'omega', 'phase', 'direction_deg'):
+            for quantity in WAVE_QUANTITIES:
                 self.add_real(f'wave{k}_{quantity}', Fmi2Causality.input)
         for name in POSE+VELOCITY:
             self.add_real('initial_'+name, Fmi2Causality.parameter)
@@ -194,9 +199,17 @@ class VesselBlock(Fmi2Slave):
         self.publish()
 
     def accept_waves(self):
-        arrays = [np.array([getattr(self, f'wave{k}_{q}') for k in range(1, N_WAVES+1)])
-                  for q in ('amplitude', 'omega', 'phase', 'direction_deg')]
-        waves = WaveComponents(*arrays[:3], np.deg2rad(arrays[3]))
+        # The components only change with the sea state, so most steps have nothing to do.
+        inputs = WAVE_INPUTS(self)
+        if inputs == self.wave_inputs:
+            return
+        self.wave_inputs = inputs
+        amplitude, omega, phase, direction = np.reshape(inputs, (4, N_WAVES))
+        # A component without amplitude adds nothing, so it is left out: a calm sea
+        # has nothing to calculate, a regular sea only one wave.
+        active = amplitude != 0
+        waves = WaveComponents(amplitude[active], omega[active], phase[active],
+                               np.deg2rad(direction[active]))
         self.wave_model.set_components(waves)
         self.wf_model.set_components(waves)
 
@@ -238,9 +251,9 @@ class VesselBlock(Fmi2Slave):
             count = int(np.ceil(step_size/self.max_internal_step_s))
             dt = step_size/count
             for j in range(count):
-                wave = self.wave_model.calculate(current_time+j*dt, self.state[:6])
+                drift = self.wave_model.second_order(current_time+j*dt, self.state[:6])
                 self.state = self.lf_model.step(self.state, dt, tau_wind=self.wind_load(),
-                                                tau_wave_drift=wave.tau_second_order,
+                                                tau_wave_drift=drift,
                                                 tau_thruster=thrust, current_ned=current)
         self.time = current_time+step_size
         self.publish()
