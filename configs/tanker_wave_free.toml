@@ -1,0 +1,375 @@
+# TANKER DIAGNOSTIC TEST: not a physically calibrated DP tanker.
+# Vessel hydrodynamics are from MSS tanker.mat, but thruster layout,
+# controller gains and non-hydrodynamic equipment remain Gunnerus defaults.
+# Wind/current/thrust allocation disabled to isolate hull and waves.
+# The extra LF viscous damping is a TEST assumption, not measured data.
+# T_126 = (49.6, 3.6, 4.5) seconds; extra roll damping zeta = 0.1.
+# RAO data: 58 original frequencies, resampled to 100 (not 100 WAMIT solves).
+
+# =====================================================================
+#  CONFIG FILE FOR THE WHOLE SIMULATION
+# =====================================================================
+# Every constant the simulation needs is here, and only here. Change a
+# number, save, and run again: no rebuild needed, since every FMU reads
+# this file when the simulation starts.
+#
+#   Section                              Read by
+#   -----------------------------------  ---------------------------------
+#   [simulation]                         ospfmusim/run.py, Vessel FMU (pin_test)
+#   [environment] [wind] [current]       Environment FMU
+#   [waves]                              Environment FMU (hs, tp, direction)
+#                                        and Waves FMU (the rest)
+#   [vessel]                             Vessel, DPController, Kalman filter
+#   [vessel_fmu]                         Vessel FMU (hydrodynamic data file)
+#   [blendermann]                        Vessel FMU (wind loads)
+#   [controller]                         DPController FMU
+#   [kalman_filter]                      ExtendedKalmanFilter FMU
+#   [allocation] [[power_sources]]       ThrustAllocation and ThrusterDynamics
+#   [[thrusters]]                        FMUs, through thruster/helpfunctions/layout.py
+#
+# Conventions:
+#   - Frames: NED for the environment, body frame (x forward, y starboard,
+#     z down) for the vessel and thrusters.
+#   - Angles in degrees, clockwise from north. Wind, waves and current:
+#     where they come FROM.
+#   - [name] starts a section, [[name]] adds one more entry to a list.
+#     Everything after # is a comment.
+# =====================================================================
+
+
+# =====================================================================
+#  SIMULATION
+# =====================================================================
+
+[simulation]
+duration = 10.0                   # how long the simulation runs [s]
+pin_test = false                  # true: the vessel is held still at its initial pose (origin, heading 0), to read the loads on it. To test another angle, change the wave direction. Thrust has no effect.
+
+
+# =====================================================================
+#  ENVIRONMENT
+# =====================================================================
+
+[environment]
+air_density = 1.226             # [kg/m^3], DNV-ST-0111 [3.5]
+
+
+# ---------------------------------------------------------------------
+#  Wind
+# ---------------------------------------------------------------------
+#   wind speed     = mean + slowly varying + gust
+#   (Sorensen, Marine Cybernetics lecture notes 2018, section 6.2.2)
+#   mean = mean_speed * log profile at reference_height
+#   wind direction = mean + rate * t + slowly varying
+# Switch a part off by setting it to 0: std = 0, n_components = 0,
+# or rate_deg_per_s = 0 and std_deg = 0.
+
+[wind]
+enabled = false                 # false: no wind (all wind speeds 0)
+mean_speed = 10.0              # U10, 1-hour mean wind speed at 10 m [m/s]
+direction_deg = 0.0            # mean direction the wind comes from [deg]
+reference_height = 10.0         # height z the wind is calculated for; mean_speed is at 10 m [m]
+surface_drag_coefficient = 0.0026  # kappa, sea surface drag coefficient, for the height profile
+seed = 1                        # random seed; same seed = same wind
+
+# Slowly varying wind speed: first-order Gauss-Markov process.
+[wind.slowly_varying]
+time_constant = 1.0           # T, how slowly it changes [s]
+std = 1.0                       # standard deviation [m/s]
+min_speed = 0.0                 # lower limit on mean + slowly varying [m/s]
+max_speed = 30.0                # upper limit on mean + slowly varying [m/s]
+
+# Gusts: harmonics from the NORSOK N-003 / ISO 19901-1 (Froya) spectrum.
+# Keep f_min above the slowly varying band (about 1/(2 pi T) Hz), so the
+# two parts do not model the same frequencies twice.
+[wind.gust]
+f_min = 0.005                   # lowest frequency [Hz]
+f_max = 0.5                     # highest frequency [Hz]
+n_components = 20             # number of harmonics
+
+# Gradual change of the wind direction.
+[wind.direction_variation]
+rate_deg_per_s = 0.0            # constant turning rate, clockwise positive [deg/s]
+time_constant = 600.0           # T of the slow random variation [s]
+std_deg = 1.0                   # standard deviation of the slow random variation [deg]
+
+
+# ---------------------------------------------------------------------
+#  Waves
+# ---------------------------------------------------------------------
+#   sea_type = "regular":   ONE regular wave with height H = hs and period
+#                           T = tp, in the mean direction. The sub-sections
+#                           below are not used.
+#   sea_type = "irregular": a sea made from a wave spectrum, long-crested
+#                           or short-crested depending on [waves.spreading].
+
+[waves]
+enabled = true                  # false: calm sea (H_s = 0)
+hs = 2.0                            # significant wave height H_s [m]  (regular: wave height H)
+tp = 9.0                      # peak wave period T_p [s]         (regular: wave period T)
+direction_deg = 45.0            # where the waves come from [deg]
+sea_type = "regular"            # "regular" or "irregular"
+seed = 123                      # random seed; same seed = same sea
+
+# Wave spectrum (Sørensen 6.2.1, DNV-RP-C205).
+[waves.spectrum]
+type = "jonswap"                # "jonswap" or "pierson_moskowitz"
+gamma = 3.3                     # JONSWAP peak factor (not used for "pierson_moskowitz")
+
+# Directional spreading, D(theta) = cos^(2s) around the mean direction.
+[waves.spreading]
+type = "cos2s"                  # "none" = long-crested, "cos2s" = short-crested
+s = 1                           # 1 = cos^2 (ITTC/DNV), 2 = ISSC; higher = narrower
+n_directions = 11               # number of direction bins
+direction_limit_deg = 90.0      # use directions within +- this angle of the mean [deg]
+
+# How the spectrum is split into n_frequencies x n_directions components.
+# The Waves FMU sends out the N_WAVES (waves/waves.py) with the most energy.
+[waves.discretization]
+n_frequencies = 30              # number of frequency bins
+omega_min_factor = 0.25         # lowest frequency  = factor * peak frequency
+omega_max_factor = 3.0          # highest frequency = factor * peak frequency
+random_frequencies = true       # random frequency inside each bin (wave groups do not repeat)
+random_directions = true        # random direction inside each bin
+
+
+# ---------------------------------------------------------------------
+#  Current (constant)
+# ---------------------------------------------------------------------
+
+[current]
+enabled = false                 # false: no current (speed 0)
+speed = 0                     # current speed [m/s]
+direction_deg = 180.0           # where the current comes FROM [deg]
+
+
+# =====================================================================
+#  VESSEL
+# =====================================================================
+
+[vessel]
+type = "cargo_vessel_loaded" # must be one of the names under [blendermann]
+loa = 246.0                      # length over all [m]
+
+area_lateral = 182.677612            # lateral area above water, A_L [m^2]
+s_L = 1.73220                     # longitudinal position of the lateral area centre [m]
+s_H = 3.40552                       # height of the lateral area centre above the waterline [m]
+
+# Current_area_lateral = 99.4893171
+# Current_s_L_lateral = -1.40325 #From mitskips
+# Current_s_H_lateral = 1.46740 # From free surface
+
+area_frontal = 82.2923208             # frontal area above water, A_F [m^2]
+# s_L_frontal = 0
+# s_H_frontal = 4.48 #from sea surface
+
+# Current_area_frontal = 19.4925167
+# Current_s_L_frontal = 0
+# Current_s_H_frontal = 1.09 #From free surface
+
+
+#   mass_matrix    = rigid-body mass + added mass [kg, kg m, kg m^2]
+#   damping_matrix = linear damping B + Bv [kg/s, kg m/s, kg m^2/s]
+# Copied by hand from data_examples/gunnerus.mat, rows and columns
+# surge, sway, yaw of the 6x6 matrices, at the LF frequency 0.2114127 rad/s
+# (the lowest in the file, selected by Wamit.py): MRB + A(w) and
+# B(w) + Bv. The same values the vessel FMU uses. M/D is about 62 s in
+# surge, 123 s in sway and 25 s in yaw.
+
+mass_matrix = [
+    [98714654.5, 0, 0],
+    [0, 145717895, 294611445],
+    [0, 294576800, 591499310207],
+]
+damping_matrix = [
+    [1990214.80847, 0, 0],
+    [0, 40477193.0556, 3.03557258558],
+    [0, 3.11670192503, 131444291157],
+]
+
+# Vessel FMU (hull/vessel.py): 6-DOF LF + WF hull. The JSON file holds the
+# 6x6 matrices and hydrodynamic tables; the path is relative to this file.
+# SYNTHETIC test data for now, not RV Gunnerus.
+
+
+# Gunnerus .mat hydrodynamics; shared wind/thruster geometry still needs calibration.
+[vessel_fmu]
+lf_reference_omega_rad_s = 0.038340159306685294
+lf_viscous_damping_diagonal_si = [1.9902145012837276e6, 4.047719238771289e7, 0.0, 3.7740278306691637e9, 0.0, 1.3144429115067477e11]
+frequency_count = 100
+heading_step_deg = 10
+frequency_spacing = "log"
+mat_file = "../data_examples/tanker.mat"
+
+# Frequency count, heading step and spacing default to Wamit.py settings.
+# No LF reference value is required: Wamit.py now selects the lowest
+# calculated source frequency when using the MATLAB Bv matrix.
+# To override the automatic selection, add lf_reference_omega_rad_s = <value>.
+use_mat_viscous_damping = false
+
+# Select Newman or Sorensen at the top of hull/helpfunctions/WaveLoads.py.
+# The selected LF frequency is a fixed-coefficient approximation, not omega=0.
+
+
+
+# Blendermann (1994), Table 1. WindLoads uses the row named by [vessel] type.
+[blendermann]
+car_carrier                    = { cd_t = 0.95, cd_lAF_bow = 0.55, cd_lAF_stern = 0.60,  delta = 0.80, kappa = 1.2 }
+cargo_vessel_loaded            = { cd_t = 0.85, cd_lAF_bow = 0.65, cd_lAF_stern = 0.55,  delta = 0.40, kappa = 1.7 }
+cargo_vessel_container_on_deck = { cd_t = 0.85, cd_lAF_bow = 0.55, cd_lAF_stern = 0.50,  delta = 0.40, kappa = 1.4 }
+container_ship_loaded          = { cd_t = 0.90, cd_lAF_bow = 0.55, cd_lAF_stern = 0.55,  delta = 0.40, kappa = 1.4 }
+destroyer                      = { cd_t = 0.85, cd_lAF_bow = 0.60, cd_lAF_stern = 0.65,  delta = 0.65, kappa = 1.1 }
+diving_support_vessel          = { cd_t = 0.90, cd_lAF_bow = 0.60, cd_lAF_stern = 0.80,  delta = 0.55, kappa = 1.7 }
+drilling_vessel                = { cd_t = 1.00, cd_lAF_bow = 0.85, cd_lAF_stern = 0.925, delta = 0.10, kappa = 1.7 }
+ferry                          = { cd_t = 0.90, cd_lAF_bow = 0.45, cd_lAF_stern = 0.50,  delta = 0.80, kappa = 1.1 }
+fishing_vessel                 = { cd_t = 0.95, cd_lAF_bow = 0.70, cd_lAF_stern = 0.70,  delta = 0.40, kappa = 1.1 }
+lng_tanker                     = { cd_t = 0.70, cd_lAF_bow = 0.60, cd_lAF_stern = 0.65,  delta = 0.50, kappa = 1.1 }
+offshore_supply_vessel         = { cd_t = 0.90, cd_lAF_bow = 0.55, cd_lAF_stern = 0.80,  delta = 0.55, kappa = 1.2 }
+passenger_liner                = { cd_t = 0.90, cd_lAF_bow = 0.40, cd_lAF_stern = 0.40,  delta = 0.80, kappa = 1.2 }
+research_vessel                = { cd_t = 0.85, cd_lAF_bow = 0.55, cd_lAF_stern = 0.65,  delta = 0.60, kappa = 1.4 }
+speed_boat                     = { cd_t = 0.90, cd_lAF_bow = 0.55, cd_lAF_stern = 0.60,  delta = 0.60, kappa = 1.1 }
+tanker_loaded                  = { cd_t = 0.70, cd_lAF_bow = 0.90, cd_lAF_stern = 0.55,  delta = 0.40, kappa = 3.1 }
+tanker_ballast                 = { cd_t = 0.70, cd_lAF_bow = 0.75, cd_lAF_stern = 0.55,  delta = 0.40, kappa = 2.2 }
+tender                         = { cd_t = 0.85, cd_lAF_bow = 0.55, cd_lAF_stern = 0.55,  delta = 0.65, kappa = 1.1 }
+
+
+# =====================================================================
+#  CONTROL AND OBSERVER
+# =====================================================================
+
+# DP controller (controller/dp_controller.py): a PID that holds the vessel at
+# the set-point. Gains from the diagonals of M and D in [vessel], one value
+# per DOF [surge, sway, yaw]:
+#   Kp = M wn^2,   Kd = 2 zeta wn M - D,   Ki = Kp wn / 10
+[controller]
+north_ref = 0.0                 # set-point north [m]
+east_ref = 0.0                  # set-point east [m]
+heading_ref_deg = 0.0           # set-point heading [deg]
+natural_frequency = [0.06, 0.06, 0.08]             # wn [rad/s]; 0 = controller off, the thrusters give no force. 0.05 = period of about 2 min
+damping_ratio = [0.9, 0.9, 0.9]                 # zeta [-]; 1 = critically damped, lower = more overshoot
+integral_force_limit = [3.0e5, 3.0e5, 1.0e7]    # anti-windup: max from the integral term [N, N, Nm]
+
+# Extended Kalman filter (observer/ekf/ekf.py), LF + WF. All matrices diagonal.
+#   State order:       [north, east, psi, u, v, r, b_x, b_y, b_n, xi_1 (3), xi_2 (3)]
+#   Measurement order: [north, east, psi], the total LF + WF motion
+# process_noise and initial_covariance below cover the first 9 (LF and bias)
+# states; the WF states are set from wave_damping_ratio and wave_motion_std.
+
+[kalman_filter]
+
+bias_time_constants = [1000.0, 1000.0, 1000.0]  # T_b [s]
+
+# Process noise Q, per second. Larger = trust the model less.
+process_noise = [1e-4, 1e-4, 1e-6,   1e-4, 1e-4, 1e-7,   1e7, 1e7, 1e10]
+
+# Measurement noise R = std^2: GNSS 0.5 m, gyro 0.5 deg.
+measurement_noise = [0.25, 0.25, 7.6e-5]
+
+# Initial covariance P0. The bias starts unknown: std 1e5 N, 1e6 Nm.
+initial_covariance = [1.0, 1.0, 0.01,   0.1, 0.1, 1e-4,   1e10, 1e10, 1e12]
+
+# Wave-frequency (WF) model, per DOF [north, east, yaw]. The peak frequency
+# is 2 pi / tp from [waves]. Q and P0 of the WF states follow from these.
+wave_damping_ratio = [0.1, 0.1, 0.1]            # lambda [-], typically 0.05-0.2
+wave_motion_std = [0.5, 0.5, 0.01]              # expected std of the WF motion [m, m, rad]
+
+
+# =====================================================================
+#  THRUSTERS AND POWER
+# =====================================================================
+# Body frame, positions from the body origin (here Lpp/2). Power in kW.
+# Every key is explained in thruster/helpfunctions/layout.py and docs/thruster_fmus.md.
+
+[allocation]
+enabled = false                 # false: every thrust command is 0, the vessel drifts
+flushing_sectors = true         # add the DNV-ST-0111 [3.11.3] flushing sectors (needs diameter)
+# When the command is more than the thrusters can give: cost per N of error
+# in X and Y, and per Nm in N. Equal weights keep the heading first.
+tau_weights = [1.0, 1.0, 1.0]
+
+
+# Switchboards. Leave out every [[power_sources]] for no power limit.
+[[power_sources]]
+name = "SWBD 1"
+available_kw = 3600.0
+reserve_fraction = 0.1          # share kept for other consumers
+
+[[power_sources]]
+name = "SWBD 2"
+available_kw = 3600.0
+reserve_fraction = 0.1
+
+
+
+# The order matters: the k-th [[thrusters]] entry is slot k in the FMUs
+# (thruster1_..., thruster2_...). At most 8 thrusters.
+
+[[thrusters]]
+name = "AZ1"                    # port azimuth
+kind = "azimuth"                # "azimuth", "tunnel" or "shaft_line"
+x = -16.95                       # [m]
+y = -2.7                        # [m]
+#z = 2.33 # From freesurface 
+max_thrust = 50000.0           # [N]
+diameter = 1.9                  # [m], PMAZM propeller (OSP demo-cases, SINTEF SimVal)
+power_kw = 500.0               # power at max_thrust [kW]
+power_supply = [["SWBD 1", 1.0]]
+thrust_time_constant = 5.0      # first-order lag of the thrust [s]
+max_azimuth_rate = 12.0         # fastest it turns [deg/s]
+# Open-water curves [[J, KT, KQ], ...], interpolated linearly. Only used by the
+# ThrusterDynamicsKtKq FMU; ThrusterDynamics ignores them. Gunnerus PMAZM
+# ducted azimuth at 0 deg azimuth (Rolls-Royce model, labelled P/D 1.4), from
+# PMAzimuth.fmu in the OSP demo-cases (MIT), sampled every 0.1 in J from the
+# polynomials in data_examples/Gunnerus_PMAZM_KT_KQ.xlsx. KT is propeller +
+# duct. Checked against the 25 Oct 2023 sea trial power only for J = 0.7-0.85,
+# not near J = 0. J < 0 holds the J = 0 values.
+open_water = [
+    [0.0, 0.820, 0.0873], [0.1, 0.756, 0.0870], [0.2, 0.692, 0.0864],
+    [0.3, 0.629, 0.0854], [0.4, 0.568, 0.0840], [0.5, 0.509, 0.0821],
+    [0.6, 0.452, 0.0797], [0.7, 0.396, 0.0768], [0.8, 0.343, 0.0731],
+    [0.9, 0.290, 0.0688], [1.0, 0.238, 0.0637], [1.1, 0.184, 0.0577],
+    [1.2, 0.128, 0.0508],
+]
+# Ka 4-70 / nozzle 19A ducted series, only used by the ThrusterDynamicsDucted
+# FMU. P/D is set so the unit absorbs power_kw at rated_rpm in bollard pull.
+# 198 rpm is NOT measured: it is what the PMAZM KQ0 above gives at 500 kW
+# (P/D 1.36, KT0 0.83 in the series). Replace it with the rated rpm from the data.
+rated_rpm = 198.0
+c_t = 1.0                       # scale on the series KT; fit to bollard pull / thrust data
+c_q = 1.0                       # scale on the series KQ; fit to logged shaft power
+
+[[thrusters]]
+name = "AZ2"                 # starboard azimuth
+kind = "azimuth"
+x = -16.95
+y = 2.7
+#z = 2.33
+max_thrust = 50000.0
+diameter = 1.9
+power_kw = 500.0
+power_supply = [["SWBD 2", 1.0]]
+thrust_time_constant = 5.0
+max_azimuth_rate = 12.0
+open_water = [                  # Gunnerus PMAZM, see AZ1
+    [0.0, 0.820, 0.0873], [0.1, 0.756, 0.0870], [0.2, 0.692, 0.0864],
+    [0.3, 0.629, 0.0854], [0.4, 0.568, 0.0840], [0.5, 0.509, 0.0821],
+    [0.6, 0.452, 0.0797], [0.7, 0.396, 0.0768], [0.8, 0.343, 0.0731],
+    [0.9, 0.290, 0.0688], [1.0, 0.238, 0.0637], [1.1, 0.184, 0.0577],
+    [1.2, 0.128, 0.0508],
+]
+rated_rpm = 198.0               # ducted series, see AZ1
+c_t = 1.0
+c_q = 1.0
+
+[[thrusters]]
+name = "BT1"                  # bow tunnel; positive thrust pushes to starboard
+kind = "tunnel"
+x = 14.5476
+y = 0.0
+#z = 1.16 #From free surface
+max_thrust = 20000.0
+diameter = 1.0
+power_kw = 200.0
+power_supply = [["SWBD 1", 1.0]]
+thrust_time_constant = 3.0
+open_water = [[-0.5, 0.52, 0.060], [1.0, 0.04, 0.018]]   # PLACEHOLDER, see AZ1

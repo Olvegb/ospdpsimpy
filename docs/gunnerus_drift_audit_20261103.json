@@ -1,0 +1,862 @@
+{
+  "sha256": {
+    "/home/araz/Documents/9 Semester/mcmodels/data/vessels/gunnerus/hydro/wamit/outputs/gunnerus.8": "9229a17cd1d6d40de8dea2e769a47cd4914bd4eecf4c171f383bc85011ac3b83",
+    "/home/araz/Documents/9 Semester/mcmodels/data/vessels/gunnerus/hydro/wamit/processed/converted_runs/run_20261102_191246_135/gunnerus.8": "9229a17cd1d6d40de8dea2e769a47cd4914bd4eecf4c171f383bc85011ac3b83",
+    "/home/araz/Documents/9 Semester/ospdpsimpy/data_examples/gunnerus2.mat": "7e7d9205e198bdb94440968a1608f7d0dfca06436a16fd4926e84f2c1c25c819",
+    "/home/araz/Documents/9 Semester/mcmodels/data/vessels/gunnerus/hydro/wamit/processed/converted_runs/run_20261102_191246_135/gunnerus2.mat": "7e7d9205e198bdb94440968a1608f7d0dfca06436a16fd4926e84f2c1c25c819"
+  },
+  "lf_approximation": "MSS M/D/G",
+  "damping": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1000000.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "coefficients": [
+    {
+      "period": 4.8,
+      "MSS_beta": 0,
+      "raw_beta": 0,
+      "raw_XYN": [
+        0.9524035,
+        -1.396486e-08,
+        -3.741637e-09
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        9573.384977856875,
+        -0.000140372206676975,
+        -3.761024759820125e-05
+      ],
+      "force_H5": [
+        59833.656111605465,
+        -0.0008773262917310938,
+        -0.0002350640474887578
+      ],
+      "along_propagation_force_H5": 59833.656111605465
+    },
+    {
+      "period": 4.8,
+      "MSS_beta": 10,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.9350038,
+        0.1495468,
+        -5.708682
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        9398.486390651751,
+        1503.2169543755,
+        -57382.622493682495
+      ],
+      "force_H5": [
+        58740.53994157344,
+        9395.105964846876,
+        -358641.3905855156
+      ],
+      "along_propagation_force_H5": 59479.58218036817
+    },
+    {
+      "period": 4.8,
+      "MSS_beta": 90,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -0.05003498,
+        3.105664,
+        -17.68773
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -502.942425032425,
+        31217.56386224,
+        -177793.8118396125
+      ],
+      "force_H5": [
+        -3143.390156452656,
+        195109.774139,
+        -1111211.3239975781
+      ],
+      "along_propagation_force_H5": 195109.774139
+    },
+    {
+      "period": 4.8,
+      "MSS_beta": 170,
+      "raw_beta": 170,
+      "raw_XYN": [
+        -0.9330406,
+        0.1389802,
+        5.506921
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -9378.75266498975,
+        1397.00343278825,
+        55354.55799526625
+      ],
+      "force_H5": [
+        -58617.20415618594,
+        8731.271454926562,
+        345965.9874704141
+      ],
+      "along_propagation_force_H5": 59242.846489774616
+    },
+    {
+      "period": 4.8,
+      "MSS_beta": 180,
+      "raw_beta": 180,
+      "raw_XYN": [
+        -0.9523749,
+        5.121963e-08,
+        9.600798e-07
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -9573.097495912125,
+        0.0005148503091529875,
+        0.009650545734936749
+      ],
+      "force_H5": [
+        -59831.85934945078,
+        0.0032178144322061717,
+        0.06031591084335468
+      ],
+      "along_propagation_force_H5": 59831.85934945078
+    },
+    {
+      "period": 4.8,
+      "MSS_beta": 190,
+      "raw_beta": 170,
+      "raw_XYN": [
+        -0.9330406,
+        0.1389802,
+        5.506921
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -9378.75266498975,
+        -1397.00343278825,
+        -55354.55799526625
+      ],
+      "force_H5": [
+        -58617.20415618594,
+        -8731.271454926562,
+        -345965.9874704141
+      ],
+      "along_propagation_force_H5": 59242.846489774616
+    },
+    {
+      "period": 4.8,
+      "MSS_beta": 270,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -0.05003498,
+        3.105664,
+        -17.68773
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -502.942425032425,
+        -31217.56386224,
+        177793.8118396125
+      ],
+      "force_H5": [
+        -3143.390156452656,
+        -195109.774139,
+        1111211.3239975781
+      ],
+      "along_propagation_force_H5": 195109.774139
+    },
+    {
+      "period": 4.8,
+      "MSS_beta": 350,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.9350038,
+        0.1495468,
+        -5.708682
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        9398.486390651751,
+        -1503.2169543755,
+        57382.622493682495
+      ],
+      "force_H5": [
+        58740.53994157344,
+        -9395.105964846876,
+        358641.3905855156
+      ],
+      "along_propagation_force_H5": 59479.58218036817
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 0,
+      "raw_beta": 0,
+      "raw_XYN": [
+        0.0009285189,
+        -8.801668e-11,
+        7.867604e-10
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        9.333301367452124,
+        -8.8472749429505e-07,
+        7.9083709735765e-06
+      ],
+      "force_H5": [
+        58.33313354657578,
+        -5.529546839344063e-06,
+        4.9427318584853126e-05
+      ],
+      "along_propagation_force_H5": 58.33313354657578
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 10,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.001130362,
+        0.0001968609,
+        0.1825566
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        11.3621911199825,
+        1.9788095936096248,
+        1835.0253984247502
+      ],
+      "force_H5": [
+        71.01369449989062,
+        12.367559960060156,
+        11468.90874015469
+      ],
+      "along_propagation_force_H5": 72.08244116278362
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 90,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -2.287885e-06,
+        0.00863507,
+        -0.06307323
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -0.02299739962113125,
+        86.79813694588749,
+        -634.0005182539875
+      ],
+      "force_H5": [
+        -0.1437337476320703,
+        542.4883559117968,
+        -3962.5032390874217
+      ],
+      "along_propagation_force_H5": 542.4883559117968
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 170,
+      "raw_beta": 170,
+      "raw_XYN": [
+        0.0004078047,
+        -7.3181e-05,
+        -0.1821227
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        4.099177910286375,
+        -0.73560196499125,
+        -1830.663915353875
+      ],
+      "force_H5": [
+        25.619861939289844,
+        -4.597512281195312,
+        -11441.649470961718
+      ],
+      "along_propagation_force_H5": -26.02898829834592
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 180,
+      "raw_beta": 180,
+      "raw_XYN": [
+        0.0006551116,
+        1.90389e-10,
+        -2.600039e-08
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        6.5850614264435,
+        1.91375524402125e-06,
+        -0.0002613511427083375
+      ],
+      "force_H5": [
+        41.156633915271875,
+        1.1960970275132812e-05,
+        -0.0016334446419271093
+      ],
+      "along_propagation_force_H5": -41.156633915271875
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 190,
+      "raw_beta": 170,
+      "raw_XYN": [
+        0.0004078047,
+        -7.3181e-05,
+        -0.1821227
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        4.099177910286375,
+        0.73560196499125,
+        1830.663915353875
+      ],
+      "force_H5": [
+        25.619861939289844,
+        4.597512281195312,
+        11441.649470961718
+      ],
+      "along_propagation_force_H5": -26.02898829834592
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 270,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -2.287885e-06,
+        0.00863507,
+        -0.06307323
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -0.02299739962113125,
+        -86.79813694588749,
+        634.0005182539875
+      ],
+      "force_H5": [
+        -0.1437337476320703,
+        -542.4883559117968,
+        3962.5032390874217
+      ],
+      "along_propagation_force_H5": 542.4883559117968
+    },
+    {
+      "period": 8.72,
+      "MSS_beta": 350,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.001130362,
+        0.0001968609,
+        0.1825566
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        11.3621911199825,
+        -1.9788095936096248,
+        -1835.0253984247502
+      ],
+      "force_H5": [
+        71.01369449989062,
+        -12.367559960060156,
+        -11468.90874015469
+      ],
+      "along_propagation_force_H5": 72.08244116278362
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 0,
+      "raw_beta": 0,
+      "raw_XYN": [
+        0.0008588509,
+        -5.936114e-11,
+        9.909943e-10
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        8.633011432947125,
+        -5.96687271670525e-07,
+        9.961292608397375e-06
+      ],
+      "force_H5": [
+        53.95632145591953,
+        -3.729295447940781e-06,
+        6.22580788024836e-05
+      ],
+      "along_propagation_force_H5": 53.95632145591953
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 10,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.001012664,
+        0.0001764802,
+        0.1770636
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        10.179112450989999,
+        1.77394654216325,
+        1779.8107717634998
+      ],
+      "force_H5": [
+        63.61945281868749,
+        11.087165888520314,
+        11123.817323521875
+      ],
+      "along_propagation_force_H5": 64.57819653027032
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 90,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -1.309199e-06,
+        0.00664467,
+        -0.04775314
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -0.01315982778268375,
+        66.7910018818875,
+        -480.005788640525
+      ],
+      "force_H5": [
+        -0.08224892364177344,
+        417.44376176179685,
+        -3000.036179003281
+      ],
+      "along_propagation_force_H5": 417.44376176179685
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 170,
+      "raw_beta": 170,
+      "raw_XYN": [
+        0.0004455706,
+        -7.997241e-05,
+        -0.1766005
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        4.47879379760225,
+        -0.8038679703896625,
+        -1775.1557756581249
+      ],
+      "force_H5": [
+        27.99246123501406,
+        -5.024174814935391,
+        -11094.72359786328
+      ],
+      "along_propagation_force_H5": -28.439631651029153
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 180,
+      "raw_beta": 180,
+      "raw_XYN": [
+        0.0006450965,
+        3.622049e-11,
+        -2.345432e-08
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        6.484391481518125,
+        3.6408170996496245e-07,
+        -0.0002357585149087
+      ],
+      "force_H5": [
+        40.527446759488285,
+        2.2755106872810154e-06,
+        -0.001473490718179375
+      ],
+      "along_propagation_force_H5": -40.527446759488285
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 190,
+      "raw_beta": 170,
+      "raw_XYN": [
+        0.0004455706,
+        -7.997241e-05,
+        -0.1766005
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        4.47879379760225,
+        0.8038679703896625,
+        1775.1557756581249
+      ],
+      "force_H5": [
+        27.99246123501406,
+        5.024174814935391,
+        11094.72359786328
+      ],
+      "along_propagation_force_H5": -28.439631651029153
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 270,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -1.309199e-06,
+        0.00664467,
+        -0.04775314
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -0.01315982778268375,
+        -66.7910018818875,
+        480.005788640525
+      ],
+      "force_H5": [
+        -0.08224892364177344,
+        -417.44376176179685,
+        3000.036179003281
+      ],
+      "along_propagation_force_H5": 417.44376176179685
+    },
+    {
+      "period": 9.0,
+      "MSS_beta": 350,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.001012664,
+        0.0001764802,
+        0.1770636
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        10.179112450989999,
+        -1.77394654216325,
+        -1779.8107717634998
+      ],
+      "force_H5": [
+        63.61945281868749,
+        -11.087165888520314,
+        -11123.817323521875
+      ],
+      "along_propagation_force_H5": 64.57819653027032
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 0,
+      "raw_beta": 0,
+      "raw_XYN": [
+        0.0007990634,
+        4.977378e-11,
+        -2.135198e-10
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        8.03203846890025,
+        5.00316890627925e-07,
+        -2.14626179533675e-06
+      ],
+      "force_H5": [
+        50.200240430626565,
+        3.126980566424531e-06,
+        -1.3414136220854687e-05
+      ],
+      "along_propagation_force_H5": 50.200240430626565
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 10,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.0009173361,
+        0.0001600878,
+        0.1676465
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        9.220893916691624,
+        1.60917314946675,
+        1685.151812955625
+      ],
+      "force_H5": [
+        57.63058697932265,
+        10.057332184167187,
+        10532.198830972657
+      ],
+      "along_propagation_force_H5": 58.50148627385295
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 90,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -7.655867e-07,
+        0.00517435,
+        -0.03659167
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -0.007695536831843874,
+        52.0116154131875,
+        -367.8127431206375
+      ],
+      "force_H5": [
+        -0.048097105199024215,
+        325.0725963324219,
+        -2298.829644503984
+      ],
+      "along_propagation_force_H5": 325.0725963324219
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 170,
+      "raw_beta": 170,
+      "raw_XYN": [
+        0.0004737255,
+        -8.480605e-05,
+        -0.1671347
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        4.761801678939375,
+        -0.8524548314883126,
+        -1680.007293398875
+      ],
+      "force_H5": [
+        29.761260493371093,
+        -5.327842696801953,
+        -10500.045583742969
+      ],
+      "along_propagation_force_H5": -30.234290248483507
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 180,
+      "raw_beta": 180,
+      "raw_XYN": [
+        0.0006327752,
+        5.474715e-11,
+        -2.477835e-08
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        6.360540037957,
+        5.503082920111875e-07,
+        -0.0002490674211781875
+      ],
+      "force_H5": [
+        39.753375237231246,
+        3.4394268250699216e-06,
+        -0.001556671382363672
+      ],
+      "along_propagation_force_H5": -39.753375237231246
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 190,
+      "raw_beta": 170,
+      "raw_XYN": [
+        0.0004737255,
+        -8.480605e-05,
+        -0.1671347
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        4.761801678939375,
+        0.8524548314883126,
+        1680.007293398875
+      ],
+      "force_H5": [
+        29.761260493371093,
+        5.327842696801953,
+        10500.045583742969
+      ],
+      "along_propagation_force_H5": -30.234290248483507
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 270,
+      "raw_beta": 90,
+      "raw_XYN": [
+        -7.655867e-07,
+        0.00517435,
+        -0.03659167
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        -0.007695536831843874,
+        -52.0116154131875,
+        367.8127431206375
+      ],
+      "force_H5": [
+        -0.048097105199024215,
+        -325.0725963324219,
+        2298.829644503984
+      ],
+      "along_propagation_force_H5": 325.0725963324219
+    },
+    {
+      "period": 9.28,
+      "MSS_beta": 350,
+      "raw_beta": 10,
+      "raw_XYN": [
+        0.0009173361,
+        0.0001600878,
+        0.1676465
+      ],
+      "MSS_XYN_per_amplitude_squared": [
+        9.220893916691624,
+        -1.60917314946675,
+        -1685.151812955625
+      ],
+      "force_H5": [
+        57.63058697932265,
+        -10.057332184167187,
+        -10532.198830972657
+      ],
+      "along_propagation_force_H5": 58.50148627385295
+    }
+  ],
+  "runs": [
+    {
+      "run": "20261103_140110",
+      "wind_enabled": false,
+      "waves_enabled": true,
+      "wave_FROM": 10.0,
+      "period": 9,
+      "height": 5.0,
+      "current_enabled": false,
+      "allocation_enabled": false,
+      "last": {
+        "Time": 2000.0,
+        "lf_north": 107.458,
+        "lf_east": 18.8761,
+        "lf_yaw": 0.0111364,
+        "wave_drift_X": 28.7923,
+        "wave_drift_Y": 4.7036,
+        "wave_drift_N": 10386.8
+      },
+      "sampled_force_max_absolute_error_XYN": [
+        0.00014852881058047274,
+        2.418879153953668e-05,
+        0.07017929842186277
+      ],
+      "matched_wave_connections": 400,
+      "maximum_delivered_thrust": 0.0,
+      "maximum_ambient_wind_speed": 0.0
+    },
+    {
+      "run": "20261103_132738_check_yaw_waves_1",
+      "wind_enabled": false,
+      "waves_enabled": true,
+      "wave_FROM": 350.0,
+      "period": 9,
+      "height": 5.0,
+      "current_enabled": false,
+      "allocation_enabled": false,
+      "last": {
+        "Time": 2500.0,
+        "lf_north": 167.454,
+        "lf_east": -30.2583,
+        "lf_yaw": -0.351273,
+        "wave_drift_X": 27.5616,
+        "wave_drift_Y": 4.93455,
+        "wave_drift_N": 11202.4
+      },
+      "sampled_force_max_absolute_error_XYN": [
+        0.00012098857318321166,
+        2.7702836197462943e-05,
+        0.07601575710759789
+      ],
+      "matched_wave_connections": 400,
+      "maximum_delivered_thrust": 0.0,
+      "maximum_ambient_wind_speed": 0.0
+    },
+    {
+      "run": "20261103_133956_check_yaw_wind_1",
+      "wind_enabled": false,
+      "waves_enabled": true,
+      "wave_FROM": 350.0,
+      "period": 9,
+      "height": 5.0,
+      "current_enabled": false,
+      "allocation_enabled": false,
+      "last": {
+        "Time": 2500.0,
+        "lf_north": 167.454,
+        "lf_east": -30.2583,
+        "lf_yaw": -0.351273,
+        "wave_drift_X": 27.5616,
+        "wave_drift_Y": 4.93455,
+        "wave_drift_N": 11202.4
+      },
+      "sampled_force_max_absolute_error_XYN": [
+        0.00012098857318321166,
+        2.7702836197462943e-05,
+        0.07601575710759789
+      ],
+      "matched_wave_connections": 400,
+      "maximum_delivered_thrust": 0.0,
+      "maximum_ambient_wind_speed": 0.0
+    }
+  ],
+  "source_sha256": {
+    "src/ospfmusim/run.py": "145c6f6cff5234037fe5e26131b416796b333fb0ddcd572f17dcca7a6563a3df",
+    "src/ospfmusim/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/build.py": "5bda5bbd59b6bd9e74d19af356a7910a9d260a258560745738e617b994a81635",
+    "src/ospfmusim/enviroment/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/enviroment/environment.py": "72b94d8022393c0f42d4d53399dfb5db1f7ae13d40eeb185689c196e51881a59",
+    "src/ospfmusim/observer/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/waves/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/waves/waves.py": "d74bbd845dfef45824de2257a2a23d2e23e98d5cabbe870390344427506b06e9",
+    "src/ospfmusim/controller/dp_controller.py": "cf9593c338870b2bb3dafb3b31a95e027ff94920af21a9ea1546b03a352a8958",
+    "src/ospfmusim/controller/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/thruster/thrust_allocation.py": "967d5d28a78d43ec3bee22c1a15451e390ce448391100c13ee18771210c6f4f0",
+    "src/ospfmusim/thruster/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/thruster/thruster_dynamics_ducted.py": "e12fbaa23c8c96b106c006081b91ac5cb6457f1e70d80bc66b134a2e55c7cce3",
+    "src/ospfmusim/thruster/thruster_dynamics.py": "fb11d4dc23fc1ba2793d2e73ef089eda6fabac87d77e44cb42a7a45a4dae8b61",
+    "src/ospfmusim/thruster/thruster_dynamics_ktkq.py": "96ed43a6e5407838ff867c50ea0e171f9abd03e5422f90d43b993a16963e649d",
+    "src/ospfmusim/hull/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/hull/vessel.py": "49da1436c8f022cc41a6a96ff61366209f4fd3062d4aef94a0cb96e06061c357",
+    "src/ospfmusim/observer/ekf/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/observer/ekf/ekf.py": "17e6d794920adae4a9ce95686359ece7ecf01d81d931400456d997c67735e01b",
+    "src/ospfmusim/waves/helpfunctions/spectra.py": "a374f26825c69eb924a6e316b2c463b5ff86d99e14124710f18883891749493e",
+    "src/ospfmusim/waves/helpfunctions/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/waves/helpfunctions/settings.py": "2700d5ef3541003aadb3e8b24a4f075a217f82fb27ff130824ab12e3e59a7124",
+    "src/ospfmusim/waves/helpfunctions/sea_state.py": "c5d68d5970aee9a1a473d80b1132f582165d3c094364ddcebe5e6be6d3913294",
+    "src/ospfmusim/thruster/helpfunctions/dynamics.py": "56f63268b884f100405c34da94db66d55d3f949293f38b082ab788edca6b1ba7",
+    "src/ospfmusim/thruster/helpfunctions/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/thruster/helpfunctions/power.py": "0a0a2e11f871424a0726b3a42447b5e1dcba6d202fca7f5f1bb2ec8e495881f6",
+    "src/ospfmusim/thruster/helpfunctions/dynamics_ktkq.py": "24f8950c38c1d838d613aecf0303a3148ff6b8149cff02204b0e7c0a59b5a4a4",
+    "src/ospfmusim/thruster/helpfunctions/zones.py": "d5b27602bec4793d32f0ceec25c2ac3b00ff0e511f0d55df596ae6d4e3e67be3",
+    "src/ospfmusim/thruster/helpfunctions/allocation.py": "3ace66aadf4d4f3624281a1e929730562660684db3487430371f1ce1db37fae0",
+    "src/ospfmusim/thruster/helpfunctions/dynamics_ducted.py": "1c3dbc9a190fb93d01099cf00f7fe7f71b22d87f4f744ee86261e8a5d389dac2",
+    "src/ospfmusim/thruster/helpfunctions/layout.py": "706802f61534eb592638398fef5f74ededea1090d3cb3b4e3d53afabf6690b4e",
+    "src/ospfmusim/hull/helpfunctions/WF.py": "dec4cb2e54e5d2d70125137209f15519c93dc8d2c2bf8f8e33a09d540d92c92f",
+    "src/ospfmusim/hull/helpfunctions/WindModel.py": "596acb609481b93b04e4969498786d51f2c869243965fa50f267bed9cf8b7e2b",
+    "src/ospfmusim/hull/helpfunctions/_wamit_motion.py": "b61e19d5af9291838a8c6b2fb251ac3e05e8770da4904da413e923749e09b4ed",
+    "src/ospfmusim/hull/helpfunctions/Wamit.py": "757e6a28361c32326ac91a4eade1521efe561053ddc7a6fbdad99cdae6e1776d",
+    "src/ospfmusim/hull/helpfunctions/WaveLoads.py": "a62970644aa9dd7141b5c927833a676d0c2f7900f9f87dfbc3b8cfcee7f894b8",
+    "src/ospfmusim/hull/helpfunctions/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/ospfmusim/hull/helpfunctions/LF.py": "a25e4ba6bdba30af8de94ae55dbebedb87c323379513b04a0e70643b07979aba"
+  },
+  "replay": {
+    "directory": "/home/araz/Documents/9 Semester/ospdpsimpy/results/forensic_replay_20261103_140110_complete",
+    "complete": true,
+    "final_time": 2000.0,
+    "exact_csv_match_for_pose_and_drift": true
+  }
+}

@@ -15,8 +15,11 @@ from ospfmusim.hull.helpfunctions.WF import WF
 from ospfmusim.hull.helpfunctions.WindModel import WindLoads
 from ospfmusim.hull.helpfunctions.WaveLoads import (WaveComponents, WaveLoads, ResponseTable,
                                                     selected_drift_method)
-from ospfmusim.hull.helpfunctions.Wamit import (load_mat_vessel, FREQUENCY_COUNT, HEADING_STEP_DEG,
-                                                FREQUENCY_SPACING)
+from ospfmusim.hull.helpfunctions.Wamit import load_mat_vessel
+from ospfmusim.hull.Control_Panel_Hull import (
+    MAX_INTERNAL_STEP_S, MAT_FILE_OVERRIDE, resolve_hull_controls,
+    apply_hull_damping, show_hull_controls,
+)
 
 POSE = ('north', 'east', 'down', 'roll', 'pitch', 'yaw')
 VELOCITY = ('u', 'v', 'w', 'p', 'q', 'r')
@@ -44,7 +47,7 @@ class VesselBlock(Fmi2Slave):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.config_path = ''
-        self.max_internal_step_s = 0.05
+        self.max_internal_step_s = MAX_INTERNAL_STEP_S
         self.time = 0.0
         self.ready = False
         self.register_variable(String(
@@ -103,13 +106,19 @@ class VesselBlock(Fmi2Slave):
             raise ValueError('max_internal_step_s must be positive and finite')
         with path.open('rb') as stream:
             shared = tomllib.load(stream)
-        # Pin test: the vessel stays at its initial pose; the loads are still calculated there.
+        # Resolve the central hull controls once per simulation run.
+        self.hull_controls = resolve_hull_controls(shared)
+        if self.hull_controls["max_internal_step_s"] is not None:
+            self.max_internal_step_s = self.hull_controls["max_internal_step_s"]
+        # Pin test: the vessel stays at its initial pose; loads are still calculated there.
         self.pin_test = bool(shared['simulation'].get('pin_test', False))
         settings = shared['vessel_fmu']
-        if 'mat_file' in settings:
+        if ('mat_file' in settings
+                or 'mat_file' in shared.get('hull_control', {})
+                or MAT_FILE_OVERRIDE is not None):
             # Load processed MSS/WAMIT hydrodynamics directly in memory.
             # No raw WAMIT parser and no JSON conversion/preparation step.
-            data_path = Path(settings['mat_file'])
+            data_path = Path(self.hull_controls["mat_file"])
             if not data_path.is_absolute():
                 data_path = path.parent / data_path
             damping_matrix = settings.get('lf_additional_damping_matrix_si')
@@ -123,13 +132,13 @@ class VesselBlock(Fmi2Slave):
                 damping_matrix = np.diag(diagonal)
             cfg = load_mat_vessel(
                 data_path,
-                frequency_count=int(settings.get('frequency_count', FREQUENCY_COUNT)),
-                heading_step_deg=int(settings.get('heading_step_deg', HEADING_STEP_DEG)),
-                frequency_spacing=settings.get('frequency_spacing', FREQUENCY_SPACING),
-                lf_reference_omega_rad_s=settings.get('lf_reference_omega_rad_s'),
+                frequency_count=self.hull_controls["frequency_count"],
+                heading_step_deg=self.hull_controls["heading_step_deg"],
+                frequency_spacing=self.hull_controls["frequency_spacing"],
+                lf_reference_omega_rad_s=self.hull_controls["lf_reference_omega_rad_s"],
                 additional_linear_damping_matrix_si=damping_matrix,
                 use_mat_viscous_damping=bool(settings.get('use_mat_viscous_damping', False)),
-                drift_method=selected_drift_method(),
+                drift_method=selected_drift_method(self.hull_controls["drift_method"]),
                 require_simulation_ready=True,
             )
         else:
@@ -141,8 +150,16 @@ class VesselBlock(Fmi2Slave):
             cfg = json.loads(data_path.read_text())
         if cfg.get('schema_version') != 1:
             raise ValueError('Expected hydrodynamic data schema_version 1')
+        # Apply explicit central damping selection after loading the MATLAB
+        # matrices, including MSS files with stored M/D/G. Baseline is unchanged.
+        cfg["damping"] = apply_hull_damping(cfg["damping"], self.hull_controls)
         lf_keys = ('rigid_mass', 'added_mass', 'damping', 'restoring')
-        self.lf_model = LF(**{key: cfg[key] for key in lf_keys})
+        self.lf_model = LF(
+            **{key: cfg[key] for key in lf_keys},
+            diagnostics=self.hull_controls,
+        )
+        self.hull_controls["mat_file"] = str(data_path)
+        show_hull_controls(self.hull_controls, cfg["damping"])
         # Reuse the group's shared vessel geometry and Blendermann coefficients.
         vessel = shared['vessel']
         wind_keys = ('loa', 'area_lateral', 'area_frontal', 's_L', 's_H')
@@ -152,8 +169,10 @@ class VesselBlock(Fmi2Slave):
         self.wind_model = WindLoads(wind)
         gravity = cfg['gravity']
         # Use the selected equation in WaveLoads.py for all vessel data sources.
-        drift_settings = dict(drift_method=selected_drift_method(),
-                              remove_sum_frequency=True)
+        drift_settings = dict(
+            drift_method=selected_drift_method(self.hull_controls["drift_method"]),
+            remove_sum_frequency=self.hull_controls["remove_sum_frequency"],
+        )
         if 'wave_force_file' in cfg:
             force_path = Path(cfg['wave_force_file'])
             if not force_path.is_absolute():

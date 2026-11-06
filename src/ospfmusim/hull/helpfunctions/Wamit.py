@@ -1,3 +1,4 @@
+
 """Load processed MSS/WAMIT hydrodynamic data from a MATLAB vessel structure.
 
 Run this file in VS Code to inspect the original frequencies and table dimensions.
@@ -22,18 +23,24 @@ except ImportError:  # VS Code: Run Python File
     from WaveLoads import ResponseTable, selected_drift_method
 
 
-# --------------- ONLY USER SETTINGS ------------------
-FREQUENCY_COUNT = 100  # None = use all original calculated source frequencies
-# .mat inspected when this file is run (or: python Wamit.py other.mat);
-# the simulation uses [vessel_fmu] mat_file in the config.
-MAT_FILE = Path(__file__).resolve().parents[4] / "data_examples" / "gunnerus.mat"
-# -----------------------------------------------------
-
-# Internal MSS loader defaults; normally no manual input is needed.
-HEADING_STEP_DEG = 10
-FREQUENCY_SPACING = "log"  # Used only when the chosen count differs from source
-LF_REFERENCE_OMEGA = None  # Select lowest calculated frequency automatically
-# Drift formulation is selected separately in WaveLoads.py.
+# Centralized editable defaults. Runtime config.toml can override these in
+# vessel.py, without changing any WAMIT interpolation equations.
+try:
+    from ..Control_Panel_Hull import (
+        MAT_FILE, FREQUENCY_COUNT, HEADING_STEP_DEG,
+        FREQUENCY_SPACING, LF_REFERENCE_OMEGA,
+        PRINT_WAMIT_MATRICES, INSPECT_WAVE_FROM_DEG,
+        INSPECT_INITIAL_YAW_DEG, INSPECT_WAVE_HEIGHT_M,
+        INSPECT_PERIODS_S,
+    )
+except ImportError:  # Direct VS Code execution with the project installed
+    from ospfmusim.hull.Control_Panel_Hull import (
+        MAT_FILE, FREQUENCY_COUNT, HEADING_STEP_DEG,
+        FREQUENCY_SPACING, LF_REFERENCE_OMEGA,
+        PRINT_WAMIT_MATRICES, INSPECT_WAVE_FROM_DEG,
+        INSPECT_INITIAL_YAW_DEG, INSPECT_WAVE_HEIGHT_M,
+        INSPECT_PERIODS_S,
+    )
 
 
 def _frequency_axis(name, values, *, allow_zero=False):
@@ -335,6 +342,88 @@ def main():
         numbers = np.abs(values) if np.iscomplexobj(values) else values
         print(f"[OK] {name:23} shape={str(values.shape):16} "
               f"min={numbers.min():.4g} max={numbers.max():.4g}")
+    # ------------------------------------------------------------------
+    # TERMINAL-ONLY AUDIT: actual 6x6 matrices passed into LF.py.
+    # Nothing below changes the matrices or the simulation.
+    # ------------------------------------------------------------------
+    print("\n========== ACTUAL 6x6 LF MATRICES ==========")
+    print("DOF order: surge, sway, heave, roll, pitch, yaw")
+    print("These are the effective matrices supplied to LF.py, NOT the")
+    print("frequency-dependent A/B/C arrays printed at every frequency.")
+
+    lf_matrices = (
+        ("MRB | rigid-body mass", data["rigid_mass"]),
+        ("A_LF | added mass", data["added_mass"]),
+        ("M_LF = MRB + A_LF | total mass", data["rigid_mass"] + data["added_mass"]),
+        ("D_LF | damping", data["damping"]),
+        ("G_LF | restoring", data["restoring"]),
+    )
+    for label, matrix in lf_matrices:
+        print(f"\n{label} (shape {matrix.shape}):")
+        if PRINT_WAMIT_MATRICES:
+            print(np.array2string(np.asarray(matrix), precision=6,
+                                  suppress_small=False, max_line_width=180))
+        else:
+            print("  (matrix printing disabled in Control_Panel_Hull.py)")
+
+    # For MSS structures containing M/D/G, these should match the
+    # effective matrices above (modulo floating-point roundoff).
+    raw_mat = loadmat(data["source"], simplify_cells=True)["vessel"]
+    if all(name in raw_mat for name in ("M", "D", "G")):
+        print("\n========== CHECK AGAINST ORIGINAL MATLAB M/D/G ==========")
+        comparisons = (
+            ("M", raw_mat["M"], data["rigid_mass"] + data["added_mass"]),
+            ("D", raw_mat["D"], data["damping"]),
+            ("G", raw_mat["G"], data["restoring"]),
+        )
+        for name, original, used in comparisons:
+            difference = np.max(np.abs(np.asarray(original, dtype=float) - used))
+            print(f"  {name}: max(abs(original - LF)) = {difference:.6g}")
+    else:
+        print("\nMATLAB structure does not contain all of M/D/G;")
+        print("the LF coefficients were derived using the alternative loader path.")
+
+    # ------------------------------------------------------------------
+    # TERMINAL-ONLY AUDIT: wave-drift coefficients actually passed to
+    # WaveLoads.py, evaluated using its own interpolation methods.
+    # This does not claim the ORIGINAL WAMIT coefficients are correct.
+    # ------------------------------------------------------------------
+    print("\n========== REGULAR-WAVE DRIFT INSPECTION ==========")
+    wave_from_deg = INSPECT_WAVE_FROM_DEG
+    vessel_yaw_deg = INSPECT_INITIAL_YAW_DEG
+    wave_to_deg = (wave_from_deg + 180.0) % 360.0
+    relative_deg = (wave_to_deg - vessel_yaw_deg) % 360.0
+    beta = np.deg2rad([relative_deg])
+    height_m = INSPECT_WAVE_HEIGHT_M  # inspection-only wave height
+    amplitude_m = height_m / 2.0
+    drift_table = data["drift_table"]
+
+    print(f"  Configured wave FROM: {wave_from_deg:g} deg")
+    print(f"  Assumed wave TO:      {wave_to_deg:g} deg (FROM + 180 deg)")
+    print(f"  Vessel initial yaw:   {vessel_yaw_deg:g} deg")
+    print(f"  Relative TO heading:  {relative_deg:g} deg")
+    print(f"  Regular-wave height:  {height_m:g} m, amplitude: {amplitude_m:g} m")
+    print("  WaveLoads mean drift for ONE regular wave: T_jj * amplitude^2")
+    print("  Columns: period, frequency, drift coefficients X/Y/N, mean loads X/Y/N")
+    print("  Units: s | rad/s | N/m^2, N/m^2, Nm/m^2 | N, N, Nm")
+    print("-" * 114)
+    print(f"{'T [s]':>6} {'omega':>9} {'TX':>13} {'TY':>13} {'TN':>13} "
+          f"{'X [N]':>13} {'Y [N]':>13} {'N [Nm]':>13}  range")
+
+    for period_s in INSPECT_PERIODS_S:
+        w = 2 * np.pi / period_s
+        at_w = drift_table.at_frequencies(np.array([w]))
+        coeff = drift_table.at_headings(at_w, beta)[:, 0]
+        load = coeff * amplitude_m**2
+        coverage = "inside" if drift_table.frequencies[0] <= w <= drift_table.frequencies[-1] else "OUTSIDE"
+        print(f"{period_s:6.1f} {w:9.5f} "
+              f"{coeff[0]:13.5g} {coeff[1]:13.5g} {coeff[2]:13.5g} "
+              f"{load[0]:13.5g} {load[1]:13.5g} {load[2]:13.5g}  {coverage}")
+    print("-" * 114)
+    print("WARNING: 'OUTSIDE' uses the table's extrapolation rule, not calculated WAMIT nodes.")
+    print("This inspection assumes wave directions are supplied TO after FMU conversion.")
+    print("Check config.toml [vessel_fmu].mat_file separately: standalone and FMU paths may differ.")
+
     # Inspection-only summary: actual keys consumed by hull/vessel.py.
     print("\n========== WAMIT -> VESSEL INPUT / OUTPUT ROUTING ==========")
     routes = (

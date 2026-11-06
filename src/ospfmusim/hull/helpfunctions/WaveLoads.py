@@ -34,11 +34,11 @@ from dataclasses import dataclass
 import numpy as np
 
 
-# ---------------- WAVE DRIFT CONTROL: edit here ----------------
-DRIFT_METHOD = "newman"  # "newman" or "sorensen"
-# Newman (6.97) handles signed Gunnerus drift coefficients.
-# Sorensen (6.99) will reject negative active drift coefficients.
-# --------------------------------------------------------------
+# The editable default is defined only in Control_Panel_Hull.py.
+# Preserve this alias for legacy callers and unit tests patching DRIFT_METHOD.
+from ospfmusim.hull.Control_Panel_Hull import DRIFT_METHOD
+# Newman (6.97): signed arithmetic mean; Sorensen (6.99): nonnegative only;
+# newman_absolute: signed extension using sqrt(abs(Tjj)).
 
 
 def selected_drift_method(method=None):
@@ -46,12 +46,13 @@ def selected_drift_method(method=None):
     options = {
         "newman": "newman_6_97",
         "sorensen": "sorensen_6_99",
+        "newman_absolute": "newman_absolute",
         "newman_6_97": "newman_6_97",
         "sorensen_6_99": "sorensen_6_99",
     }
     method = DRIFT_METHOD if method is None else method
     if method not in options:
-        raise ValueError("DRIFT_METHOD must be 'newman' or 'sorensen'")
+        raise ValueError("DRIFT_METHOD must be 'newman', 'sorensen', or 'newman_absolute'")
     return options[method]
 
 
@@ -267,12 +268,21 @@ class WaveLoadModel:
         j = self._idx
         return table[:, j, lo] * (1.0 - w) + table[:, j, hi] * w
 
+    def _mat_heading(self, psi):
+        """Relative propagation (TO) heading for the MSS/WAMIT RAO and drift tables.
+
+        Waves FMU already converts the configured FROM angle to TO once;
+        never add another 180 degrees here. psi is the LF vessel yaw [rad].
+        """
+        return (self.directions - psi) % (2.0 * np.pi)
+
+
     def first_order(self, t, eta):
         # FORMULA: tau_1 = Re{conj(H_force) * exp(i*phase)} @ amplitudes.
         if len(self.amplitudes) == 0:
             return np.zeros(3)
         north, east, psi = eta
-        H = self._interpolate_heading(self._rao, self.directions - psi)
+        H = self._interpolate_heading(self._rao, self._mat_heading(psi))
         arg = (self.frequencies * t
                - self._k * (north * np.cos(self.directions) + east * np.sin(self.directions))
                - self.phases)
@@ -283,12 +293,31 @@ class WaveLoadModel:
         if len(self.amplitudes) == 0:
             return np.zeros(3)
         psi = eta[2]
-        T = self._interpolate_heading(self._drift, self.directions - psi)
+        T = self._interpolate_heading(self._drift, self._mat_heading(psi))
         e = self.amplitudes * np.exp(1j * (self.frequencies * t - self.phases))
 
         # FORMULA: Newman (6.97), accepts signed Gunnerus drift coefficients.
         if self.drift_method == "newman_6_97":
             return ((T * e).sum(axis=1) * np.conj(e.sum())).real
+
+        # FORMULA: Signed absolute-value extension of Eq. (25).
+        # For each DOF, sqrt(abs(Tjj)) preserves the magnitude and the
+        # positive/negative contributions are summed separately. If all
+        # active coefficients have the same sign this reduces exactly to
+        # sign(Tjj) * |sum(Aj * sqrt(abs(Tjj)) * exp(i*phasej))|^2
+        # (or its unfiltered 2*real(...)**2 form).
+        # With mixed signs, cross-sign interactions are omitted: one common
+        # sign(Tjj) outside the sum is otherwise mathematically undefined.
+        # This retains the correct signed mean: sum(Aj**2 * Tjj).
+        if self.drift_method == "newman_absolute":
+            root_abs_T = np.sqrt(np.abs(T))
+            z_positive = np.sum(np.where(T >= 0, root_abs_T, 0.0) * e[None, :], axis=1)
+            z_negative = np.sum(np.where(T < 0, root_abs_T, 0.0) * e[None, :], axis=1)
+            if self.remove_sum_frequency:
+                # Mean + difference-frequency drift; no sum-frequency load.
+                return np.abs(z_positive)**2 - np.abs(z_negative)**2
+            # Literal Eq. (25) for a uniform coefficient sign.
+            return 2.0 * (np.real(z_positive)**2 - np.real(z_negative)**2)
 
         # FORMULA: Sorensen (6.99), requires nonnegative active drift coefficients.
         active = self.amplitudes > 0
@@ -315,7 +344,7 @@ class WaveLoadModel:
         # FORMULA: mean = T @ amplitude^2 (diagnostic, do not add to LF twice).
         if len(self.amplitudes) == 0:
             return np.zeros(3)
-        T = self._interpolate_heading(self._drift, self.directions - psi)
+        T = self._interpolate_heading(self._drift, self._mat_heading(psi))
         return T @ self.amplitudes**2
 
     def loads(self, t, eta):
