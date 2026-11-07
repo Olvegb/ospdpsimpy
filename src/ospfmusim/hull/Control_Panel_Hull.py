@@ -46,15 +46,15 @@ REMOVE_SUM_FREQUENCY = True     # second-order difference-frequency + mean only
 # "matlab": D_used = D_MAT (original baseline)
 # "add":    D_used = D_MAT + D_custom
 # "replace":D_used = D_custom
-DAMPING_MODE = "matlab"  # "matlab", "add", or "replace"
+DAMPING_MODE = "add"  # "matlab", "add", or "replace"
 
 DAMPING_DIAGONAL_SI = (
-    1000000.0,    # Surge
-    1000000.0,     # Sway
-    0.0,        # Heave
-    1000000.0,        # Roll
-    1000000.0,        # Pitch
-    100000.0, # Yaw
+    50000.0,    # Surge
+    100000,     # Sway
+    800000.0,        # Heave
+    1500000.0,        # Roll
+    50000000.0,        # Pitch
+    5000000.0, # Yaw
 )
 
 DAMPING_MATRIX_SI = None
